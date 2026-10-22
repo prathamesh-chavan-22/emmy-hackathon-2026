@@ -23,6 +23,7 @@ REDUCE_KNOBS = "WORK=t128,REDUCE=coop"
 EXACT = dict(rtol=0, atol=0)
 TRANS = dict(rtol=1e-6, atol=1e-6)
 RED = dict(rtol=1e-4, atol=1e-4, knobs=REDUCE_KNOBS)
+MM = dict(rtol=1e-3, atol=1e-3)
 
 f64 = lambda a: a.astype(np.float64)
 f32 = lambda a: np.asarray(a).astype(np.float32)
@@ -150,4 +151,76 @@ OPEN = [
          ref=lambda x: [f32(_softmax(f64(x)))], rtol=1e-3, atol=1e-5),
     dict(id="x_f_layernorm_ish", code="x = torch.randn(64, 512); x - x.mean(-1, keepdim=True)",
          ref=lambda x: [f32(f64(x) - f64(x).mean(-1, keepdims=True))], rtol=1e-3, atol=1e-4),
+
+    # ---- round 2: the categories the open set covers thinly -----------------
+    # matmul: tiny, non-square, odd (non-tile-multiple) sizes, long K (split-K), batched, epilogues
+    dict(id="x_m_small", code="torch.randn(32, 32) @ torch.randn(32, 32)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], **MM),
+    dict(id="x_m_tall", code="torch.randn(1024, 64) @ torch.randn(64, 32)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], **MM),
+    dict(id="x_m_wide", code="torch.randn(16, 128) @ torch.randn(128, 512)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], **MM),
+    dict(id="x_m_longk", code="torch.randn(64, 2048) @ torch.randn(2048, 64)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], rtol=1e-3, atol=1e-2),
+    dict(id="x_m_odd", code="torch.randn(100, 70) @ torch.randn(70, 50)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], **MM),
+    dict(id="x_m_256", code="torch.randn(256, 384) @ torch.randn(384, 256)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], **MM),
+    dict(id="x_m_batched", code="torch.randn(4, 64, 32) @ torch.randn(4, 32, 48)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], **MM),
+    dict(id="x_m_bias_relu", code="a = torch.randn(128, 64); b = torch.randn(64, 96); c = torch.randn(96); "
+                                  "torch.relu(a @ b + c)",
+         ref=lambda a, b, c: [f32(np.maximum(f64(a) @ f64(b) + f64(c), 0))], **MM),
+    dict(id="x_m_scaled", code="(torch.randn(64, 128) @ torch.randn(128, 64)) * 0.5",
+         ref=lambda a, b: [f32((f64(a) @ f64(b)) * 0.5)], **MM),
+
+    # fused: full layernorm, log-softmax, scaled softmax, norm + activation, odd widths
+    # Intermediates must be written inline: the tracer turns a named intermediate
+    # (`d = x - m`) into a fresh random input.
+    dict(id="x_f_layernorm", code="x = torch.randn(32, 768); w = torch.randn(768); b = torch.randn(768); "
+                                  "(x - x.mean(-1, keepdim=True)) / torch.sqrt("
+                                  "((x - x.mean(-1, keepdim=True)) ** 2).mean(-1, keepdim=True) + 1e-5) * w + b",
+         ref=lambda x, w, b: [f32((f64(x) - f64(x).mean(-1, keepdims=True))
+                                  / np.sqrt(f64(x).var(-1, keepdims=True) + 1e-5) * f64(w) + f64(b))],
+         rtol=1e-3, atol=1e-4),
+    # torch.log_softmax does not trace in emmy 0.3.11; the hand-written form does.
+    dict(id="x_f_log_softmax", code="x = torch.randn(64, 200); "
+                                    "x - x.amax(-1, keepdim=True) - torch.log(torch.exp("
+                                    "x - x.amax(-1, keepdim=True)).sum(-1, keepdim=True))",
+         ref=lambda x: [f32(np.log(_softmax(f64(x))))], rtol=1e-3, atol=1e-4),
+    dict(id="x_f_softmax_scaled", code="torch.softmax(torch.randn(16, 384) * 0.125, dim=-1)",
+         ref=lambda x: [f32(_softmax(f64(x) * 0.125))], rtol=1e-3, atol=1e-5),
+    dict(id="x_f_rmsnorm_silu", code="x = torch.randn(48, 256); "
+                                     "torch.nn.functional.silu(x / torch.sqrt((x * x).mean(-1, keepdim=True) + 1e-6))",
+         ref=lambda x: [f32((lambda y: y / (1 + np.exp(-y)))(f64(x) / np.sqrt((f64(x) ** 2).mean(-1, keepdims=True) + 1e-6)))],
+         rtol=1e-3, atol=1e-4),
+    dict(id="x_f_softmax_odd", code="torch.softmax(torch.randn(7, 33), dim=-1)",
+         ref=lambda x: [f32(_softmax(f64(x)))], rtol=1e-3, atol=1e-5),
+    dict(id="x_f_max_sub", code="x = torch.randn(64, 300); x - x.amax(-1, keepdim=True)",
+         ref=lambda x: [f32(f64(x) - f64(x).max(-1, keepdims=True))], rtol=1e-5, atol=1e-6),
+
+    # attention: other sequence lengths / head dims, non-square Q vs K
+    dict(id="x_a_32x16", code="q = torch.randn(32, 16); kt = torch.randn(16, 32); v = torch.randn(32, 16); "
+                              "torch.softmax(q @ kt / 4.0, dim=-1) @ v",
+         ref=lambda q, kt, v: [f32(_softmax((f64(q) @ f64(kt)) / 4.0) @ f64(v))], rtol=1e-3, atol=1e-4),
+    dict(id="x_a_256x64", code="q = torch.randn(256, 64); kt = torch.randn(64, 256); v = torch.randn(256, 64); "
+                               "torch.softmax(q @ kt / 8.0, dim=-1) @ v",
+         ref=lambda q, kt, v: [f32(_softmax((f64(q) @ f64(kt)) / 8.0) @ f64(v))], rtol=1e-3, atol=1e-4),
+    dict(id="x_a_rect", code="q = torch.randn(64, 32); kt = torch.randn(32, 192); v = torch.randn(192, 48); "
+                             "torch.softmax(q @ kt * 0.17677669, dim=-1) @ v",
+         ref=lambda q, kt, v: [f32(_softmax((f64(q) @ f64(kt)) * 0.17677669) @ f64(v))], rtol=1e-3, atol=1e-4),
+    dict(id="x_a_batched", code="q = torch.randn(4, 64, 32); kt = torch.randn(4, 32, 64); v = torch.randn(4, 64, 32); "
+                               "torch.softmax(q @ kt / 5.656854, dim=-1) @ v",
+         ref=lambda q, kt, v: [f32(_softmax((f64(q) @ f64(kt)) / 5.656854) @ f64(v))], rtol=1e-3, atol=1e-4),
+
+    # reductions: other ops and axes
+    # prod() does not trace in emmy 0.3.11 (no elementwise mapping for aten.prod).
+    dict(id="x_r_mean_3d", code="torch.randn(8, 16, 128).mean(-1)",
+         ref=lambda x: [f32(f64(x).mean(-1))], **RED),
+    dict(id="x_r_sum_dim0", code="torch.randn(256, 64).sum(0)",
+         ref=lambda x: [f32(f64(x).sum(0))], **RED),
+    dict(id="x_r_abs_max", code="torch.randn(4096).abs().amax()",
+         ref=lambda x: [f32(np.abs(x).max())], **RED),
+    dict(id="x_r_unpinned_rows", code="torch.randn(32, 4096).sum(-1)",
+         ref=lambda x: [f32(f64(x).sum(-1))], rtol=1e-3, atol=1e-3),
 ]

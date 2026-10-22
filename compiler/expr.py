@@ -76,7 +76,7 @@ def lower(ctx: Context, e) -> Value:
     if kind == "BinaryExpr":
         return binary(ctx, e.op, lower(ctx, e.left), lower(ctx, e.right))
     if kind == "TernaryExpr":
-        return _select(ctx, lower(ctx, e.cond), lower(ctx, e.if_true), lower(ctx, e.if_false))
+        return select(ctx, lower(ctx, e.cond), lower(ctx, e.if_true), lower(ctx, e.if_false))
     raise NotImplementedError(f"expression {kind}: {e}")
 
 
@@ -117,7 +117,7 @@ def binary(ctx: Context, op: str, a: Value, b: Value) -> Value:
     return Value(r, "f32" if is_float else "s32")
 
 
-def _select(ctx: Context, cond: Value, t: Value, f: Value) -> Value:
+def select(ctx: Context, cond: Value, t: Value, f: Value) -> Value:
     if cond.is_imm:
         return t if cond.const else f
     if "f32" in (t.kind, f.kind):

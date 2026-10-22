@@ -40,14 +40,13 @@ def address(ctx: Context, buf: Buffer, flat: Value) -> tuple[str, int]:
     size = dtype_bytes(buf.dtype)
     if flat.is_imm:
         return buf.addr, flat.const * size
+    # base + flat * size in one multiply-add (mad.wide widens the index to 64-bit).
     if buf.space == "shared":
-        off, addr = em.reg("s32"), em.reg("s32")
-        em.emit(f"mul.lo.s32 \t{off}, {flat.text}, {size}")
-        em.emit(f"add.s32 \t{addr}, {buf.addr}, {off}")
+        addr = em.reg("s32")
+        em.emit(f"mad.lo.s32 \t{addr}, {flat.text}, {size}, {buf.addr}")
         return addr, 0
-    wide, addr = em.reg("u64"), em.reg("u64")
-    em.emit(f"mul.wide.s32 \t{wide}, {flat.text}, {size}")
-    em.emit(f"add.s64 \t{addr}, {buf.addr}, {wide}")
+    addr = em.reg("u64")
+    em.emit(f"mad.wide.s32 \t{addr}, {flat.text}, {size}, {buf.addr}")
     return addr, 0
 
 

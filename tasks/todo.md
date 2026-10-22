@@ -1,6 +1,6 @@
 # Status briefing (2026-10-22, deadline Oct 27 23:59 AoE)
 
-## Score: 15/15 open problems pass. 50/50 extra tests pass.
+## Score: 15/15 open problems pass. 73/73 extra tests pass.
 
 | cat | problems | status |
 |---|---|---|
@@ -140,3 +140,11 @@ Second review (all 5 fixed):
 - Seeded accumulators stay writable after their loop; `ctx.assign` copies instead of aliasing
   a register that is updated in place.
 - Pool bytes = prod(extents)*4 exactly like pack_smem; no stray blank line before `.extern`.
+
+Third review + diverse tests (2026-10-22):
+- Fixed: Cond branches and WarpShuffle steps scoped (lower_block / ctx.scope); `mad` addressing.
+- Not changed (by design): TreeHalve temps dropped after it (matches emmy's C block scoping);
+  Accum inside combine programs (emmy types them as Assign only); `k_end` lifetime (harmless);
+  per-level address recompute in TreeHalve (ptxas CSEs it).
+- New Select node. 23 new tests; all pass.
+- Note: check_local's 1 s compile-time gate fails when the machine is busy with other jobs.

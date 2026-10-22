@@ -90,3 +90,18 @@ Extra test set (tests/problems, generated from tests/expressions_extra.py): 50/5
 - **Bug found**: a loop with seed=True was releasing accumulators that an enclosing Init owned;
   now a loop only releases the accumulators it seeded itself.
 - m02 (split-K) needed nothing else: atomic writes + zero_outputs already worked.
+
+## 2026-10-22 - more diverse tests, Select, review round 3 (15/15 open, 73/73 extra)
+
+- **23 new test problems** aimed at the thin categories: matmul (32x32, tall, wide, K=2048
+  split-K, odd 100x70x50, 256x384x256, batched 4x, bias+relu epilogue, scaled), fused (full
+  layernorm, log-softmax, scaled/odd softmax, rmsnorm+silu, max-subtract), attention (32x16,
+  256x64, rectangular Q/K/V, batched 4 heads), reductions (3-D mean, dim-0 sum, abs-max,
+  unpinned rows). All pass.
+- **New node: Select** (the odd matmul masks its out-of-range tail with it) = a chain of
+  `selp`, first true predicate wins, last branch is the catch-all.
+- **Test-writing gotcha**: emmy's tracer turns a named intermediate (`d = x - m`) into a new
+  random input, so fused tests must write intermediates inline. log_softmax and prod do not
+  trace at all -> the hidden set cannot contain them.
+- **Review fixes**: if/else bodies and warp-shuffle steps are now scopes (names bound inside
+  no longer leak out); address math is one `mad` instead of mul + add.

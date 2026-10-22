@@ -123,19 +123,24 @@ def lower_warp_shuffle(ctx: Context, s) -> None:
 
     Each step pulls the partner lane's state into state_b and folds it in with
     the carrier's combine program. The member mask is activemask (not 0xffffffff)
-    because a small block can be a partial warp.
+    because a small block can be a partial warp. Each step is its own block
+    (as in emmy's C): only the folded state leaves it.
     """
     em = ctx.em
     mask = em.reg("b32")
     em.emit(f"activemask.b32 \t{mask}")
     step = int(s.length) // 2
     while step > 0:
-        for st, sb in zip(s.state, s.state_b):
-            src = X.to_reg(ctx, ctx.lookup(st))
-            dst = em.reg("f32")
-            em.emit(f"shfl.sync.bfly.b32 \t{dst}, {src.text}, {step}, 31, {mask}", f"{sb} = lane ^ {step}")
-            ctx.bind(sb, Value(dst, "f32"))
-        lower_body(ctx, s.combine_states)
+        with ctx.scope():
+            for st, sb in zip(s.state, s.state_b):
+                src = X.to_reg(ctx, ctx.lookup(st))
+                dst = em.reg("f32")
+                em.emit(f"shfl.sync.bfly.b32 \t{dst}, {src.text}, {step}, 31, {mask}", f"{sb} = lane ^ {step}")
+                ctx.bind(sb, Value(dst, "f32"))
+            lower_body(ctx, s.combine_states)
+            folded = [ctx.lookup(st) for st in s.state]
+        for st, v in zip(s.state, folded):
+            ctx.assign(st, v)
         step //= 2
 
 

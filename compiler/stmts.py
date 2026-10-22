@@ -38,6 +38,15 @@ def lower_body(ctx: Context, body) -> None:
         handler(ctx, stmt)
 
 
+def lower_block(ctx: Context, body) -> None:
+    """A nested statement list (an if/else side): names it binds stay inside it.
+
+    Writes to carried state still land, since those go into the state's own register.
+    """
+    with ctx.scope():
+        lower_body(ctx, body)
+
+
 def dtype_name(dt) -> str:
     return "f32" if dt is None else getattr(dt, "name", str(dt))
 
@@ -161,18 +170,18 @@ def lower_cond(ctx: Context, s) -> None:
     em = ctx.em
     p = X.lower(ctx, s.cond)
     if p.is_imm:                      # statically decided: emit only the live side
-        lower_body(ctx, s.body if p.const else s.else_body)
+        lower_block(ctx, s.body if p.const else s.else_body)
         return
     if p.kind != "pred":
         p = X.binary(ctx, "!=", p, X.imm(0))
     end = em.label("endif")
     skip = em.label("else") if s.else_body else end
     em.emit(f"@!{p.text} bra \t{skip}")
-    lower_body(ctx, s.body)
+    lower_block(ctx, s.body)
     if s.else_body:
         em.emit(f"bra.uni \t{end}")
         em.place(skip)
-        lower_body(ctx, s.else_body)
+        lower_block(ctx, s.else_body)
     em.place(end)
 
 
@@ -245,6 +254,19 @@ def lower_accum(ctx: Context, s) -> None:
 def lower_init(ctx: Context, s) -> None:
     """Carried state seeded with a literal; later folds update it in place."""
     ctx.declare_var(s.name, X.imm(float(s.identity)))
+
+
+@handles("Select")
+def lower_select_stmt(ctx: Context, s) -> None:
+    """`name = v0 when p0, v1 when p1, ..., vN`: a chained selp, first true predicate wins.
+
+    The last branch is the catch-all (its predicate is not tested), as in emmy's
+    ternary chain. Used for masked tails: out-of-range lanes pick the identity.
+    """
+    value = ctx.lookup(s.branches[-1].value)
+    for b in reversed(s.branches[:-1]):
+        value = X.select(ctx, X.lower(ctx, b.select), ctx.lookup(b.value), value)
+    ctx.assign(s.name, value)
 
 
 @handles("Let")

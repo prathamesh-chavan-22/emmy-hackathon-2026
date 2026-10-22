@@ -1,0 +1,88 @@
+{
+ "id": "x_f_rmsnorm_silu",
+ "code": "x = torch.randn(48, 256); torch.nn.functional.silu(x / torch.sqrt((x * x).mean(-1, keepdim=True) + 1e-6))",
+ "rtol": 0.001,
+ "atol": 0.0001,
+ "graph_inputs": [
+  "x"
+ ],
+ "graph_outputs": [
+  "silu"
+ ],
+ "kernels": [
+  {
+   "node": "silu",
+   "entry": "k_mean_e6b8b9",
+   "arg_order": [
+    "mean_count",
+    "add_c1",
+    "silu_one",
+    "x",
+    "silu"
+   ],
+   "grid": [
+    48,
+    1,
+    1
+   ],
+   "block": [
+    128,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mean_count",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      256.0
+     ]
+    },
+    {
+     "name": "add_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      1e-06
+     ]
+    },
+    {
+     "name": "silu_one",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      1.0
+     ]
+    },
+    {
+     "name": "x",
+     "dtype": "f32",
+     "shape": [
+      48,
+      256
+     ],
+     "seed": 0
+    },
+    {
+     "name": "silu",
+     "dtype": "f32",
+     "shape": [
+      48,
+      256
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}
