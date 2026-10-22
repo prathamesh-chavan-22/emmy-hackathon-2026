@@ -193,10 +193,12 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> Non
     before the loop (unless `seed` is off: then an enclosing Init owns them).
     """
     em = ctx.em
+    seeded = []
     if s.seed:
         for acc in s.body:
             if type(acc).__name__ == "Accum" and acc.name not in ctx.mutable:
                 ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
+                seeded.append(acc.name)
     i = ctx.declare_var(s.axis.name, start)
     top, done = em.label(f"loop_{s.axis.name}"), em.label(f"loop_{s.axis.name}_end")
     p = em.reg("pred")
@@ -207,10 +209,10 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> Non
     em.emit(f"add.s32 \t{i.text}, {i.text}, {step.text}")
     em.emit(f"bra.uni \t{top}")
     em.place(done)
-    # Seeded accumulators finish here; a later loop may seed the same name again.
-    for acc in s.body:
-        if type(acc).__name__ == "Accum" and s.seed:
-            ctx.mutable.pop(acc.name, None)
+    # Accumulators seeded here finish here (a later loop may seed the same name
+    # again); ones an enclosing Init owns stay mutable.
+    for name in seeded:
+        ctx.mutable.pop(name, None)
 
 
 @handles("StridedLoop")

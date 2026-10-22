@@ -12,13 +12,14 @@ from . import coop  # noqa: F401  registers the cross-thread statement handlers
 
 def compile_kernel(spec: KernelSpec) -> str:
     """Lower one kernel to a complete PTX module."""
-    ctx = Context(Emitter(), {}, spec.threads_launched, constants=spec.constants)
+    ctx = Context(Emitter(), {}, spec.threads_launched, constants=spec.constants,
+                  smem_pool=spec.smem_bytes)
     load_params(ctx, spec)
     lower_body(ctx, spec.body)
     ctx.em.emit("ret")
 
     body = ctx.em.declarations() + [""] + ctx.em.lines
-    ptx = "\n".join([HEADER, signature(spec), "{", *body, "}", ""])
+    ptx = "\n".join([HEADER, *ctx.em.module, signature(spec), "{", *body, "}", ""])
     ptx.encode("ascii")  # PTX rejects non-ASCII anywhere; fail here, not in ptxas
     return ptx
 

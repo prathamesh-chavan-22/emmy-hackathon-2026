@@ -47,6 +47,9 @@ class Context:
     # Names that own a register updated in place (accumulators, carried state).
     # Every other name is SSA: rebinding just points it at a new register.
     mutable: dict[str, Value] = field(default_factory=dict)
+    # Dynamic shared memory pool (meta smem_bytes > 0): its size and the next free byte.
+    smem_pool: int = 0
+    smem_used: int = 0
 
     def bind(self, name: str, value: Value) -> None:
         self.env[name] = value

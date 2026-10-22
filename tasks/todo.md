@@ -1,12 +1,12 @@
 # Status briefing (2026-10-22, deadline Oct 27 23:59 AoE)
 
-## Score: 13/15 open problems pass (all but matmul m01/m02). MVP = 8/15 reached.
+## Score: 15/15 open problems pass. 50/50 extra tests pass.
 
 | cat | problems | status |
 |---|---|---|
 | 1 pointwise | p00 p01 p02 p03 | PASS (exact match) |
 | 2 reductions | r01 r02 r03 r04 | PASS |
-| 3 matmul | m01 m02 | todo - phase 3 |
+| 3 matmul | m01 m02 | PASS |
 | 4 fused | f01 f02 f03 | PASS (no new nodes needed) |
 | 5 attention | a01 a02 | PASS (no new nodes needed) |
 
@@ -92,9 +92,9 @@ rowmax, colsum, unpinned_sum) -> `py tests/run_all.py --extra r0 x_r`
       riftstack.ai/hackathon/submit (MVP secured)
 
 ### Phase 3 - matmul m01 m02
-- [ ] Loop, Init, 2-D indexing, accumulator tiles
-- [ ] CpAsyncCopy / Commit / Wait (`cp.async` global -> shared)
-- [ ] Atomics + zero_outputs (m02); dynamic shared memory when meta smem_bytes > 0
+- [x] Loop, Init, 2-D indexing, accumulator tiles
+- [x] CpAsyncCopy / Commit / Wait (`cp.async` global -> shared)
+- [x] Atomics + zero_outputs (m02); dynamic shared memory when meta smem_bytes > 0
 
 ### Phase 4 - fused f01 f02 f03
 - [ ] Reduction + elementwise in one kernel (rmsnorm, l2norm)

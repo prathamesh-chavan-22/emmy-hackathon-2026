@@ -10,9 +10,10 @@ import math
 
 from . import expr as X
 from .context import Buffer, Context, Value
-from .stmts import handles, load_values, lower_body, store_values
+from .stmts import _mem, address, flat_index, handles, load_values, lower_body, store_values
 
 SMEM_DTYPES = {"float": "f32"}   # Smem carries the C type name
+DYN_POOL = "dyn_smem"            # the extern pool behind dynamic shared memory
 
 
 def _sync(ctx: Context, barrier_id: int, count) -> None:
@@ -29,18 +30,71 @@ def lower_smem(ctx: Context, s) -> None:
 
     Shared addresses are 32-bit offsets in the shared window, so Load/Write on
     it use 32-bit math and ld/st.shared.
+
+    When meta.json asks for dynamic shared memory (smem_bytes > 0, emmy's choice
+    once the buffers outgrow the 48 KB static cap), every array is carved out of
+    one extern pool at an aligned offset instead of being its own .shared symbol.
     """
+    if s.name in ctx.buffers:          # already declared (e.g. a re-entered scope)
+        return
     try:
         dt = SMEM_DTYPES[s.dtype]
     except KeyError:
         raise NotImplementedError(f"Smem dtype {s.dtype}") from None
     extents = tuple(int(e) for e in s.extents)
-    symbol = f"sh_{s.name}"
     nbytes = max(1, math.prod(extents)) * 4
-    ctx.em.declare_shared(symbol, nbytes, max(int(s.align), 16))   # 16: room for v4 access
-    base = ctx.em.reg("s32")
-    ctx.em.emit(f"mov.u32 \t{base}, {symbol}", s.name)
+    align = max(int(s.align), 16)      # 16: room for v4 / 16-byte cp.async access
+    em = ctx.em
+    base = em.reg("s32")
+    if ctx.smem_pool:
+        if not em.module:
+            em.module.append(f".extern .shared .align 16 .b8 {DYN_POOL}[];\n")
+        offset = -(-ctx.smem_used // align) * align
+        ctx.smem_used = offset + nbytes
+        if ctx.smem_used > ctx.smem_pool:
+            raise ValueError(f"shared arrays need {ctx.smem_used} B, launch provides {ctx.smem_pool} B")
+        em.emit(f"mov.u32 \t{base}, {DYN_POOL}")
+        if offset:
+            em.emit(f"add.s32 \t{base}, {base}, {offset}", f"{s.name} at pool+{offset}")
+    else:
+        symbol = f"sh_{s.name}"
+        em.declare_shared(symbol, nbytes, align)
+        em.emit(f"mov.u32 \t{base}, {symbol}", s.name)
     ctx.buffers[s.name] = Buffer(s.name, base, dt, extents, space="shared")
+
+
+@handles("CpAsyncCopy")
+def lower_cp_async_copy(ctx: Context, s) -> None:
+    """Asynchronous global -> shared copy of one 4/8/16-byte chunk, no register staging.
+
+    16-byte copies use .cg (bypass L1, the streaming form); smaller ones .ca.
+    `lane_index`, when set, is this thread's (row, col) inside a copy stripe and
+    is added to the stripe's base element.
+    """
+    if s.swizzle not in ("NONE", "", None):
+        raise NotImplementedError(f"cp.async swizzle {s.swizzle}")
+    dst_buf, src_buf = ctx.buffers[s.smem], ctx.buffers[s.src]
+    dst = flat_index(ctx, dst_buf, s.smem_index)
+    if s.lane_index is not None:
+        row, col = (X.lower(ctx, e) for e in s.lane_index)
+        lane = X._binary(ctx, "+", X._binary(ctx, "*", row, X.imm(dst_buf.shape[-1])), col)
+        dst = X._binary(ctx, "+", dst, lane)
+    d_base, d_off = address(ctx, dst_buf, dst)
+    s_base, s_off = address(ctx, src_buf, flat_index(ctx, src_buf, s.src_index))
+    cache = "cg" if s.nbytes == 16 else "ca"
+    ctx.em.emit(f"cp.async.{cache}.shared.global \t{_mem(d_base, d_off)}, {_mem(s_base, s_off)}, {s.nbytes}")
+
+
+@handles("CpAsyncCommit")
+def lower_cp_async_commit(ctx: Context, s) -> None:
+    """Close this thread's outstanding cp.async copies into one group."""
+    ctx.em.emit("cp.async.commit_group")
+
+
+@handles("CpAsyncWait")
+def lower_cp_async_wait(ctx: Context, s) -> None:
+    """Wait until at most `group` committed groups are still in flight (pipelining depth)."""
+    ctx.em.emit(f"cp.async.wait_group \t{int(s.group)}")
 
 
 @handles("Sync")

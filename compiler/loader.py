@@ -30,6 +30,7 @@ class KernelSpec:
     grid: tuple[int, int, int] | None
     block: tuple[int, int, int] | None
     constants: dict[str, float]  # ConstantOp buffer -> its value (also passed at launch)
+    smem_bytes: int = 0          # dynamic shared memory the launch provides (meta.json)
 
     @property
     def threads_launched(self) -> int | None:
@@ -92,11 +93,13 @@ def load(ir_path: str | Path) -> KernelSpec:
         by_name = {p.name: p for p in params}
         params = tuple(by_name[n] for n in entry["arg_order"])
         grid, block = tuple(entry["grid"]), tuple(entry["block"])
+        smem_bytes = int(entry.get("smem_bytes", 0))
     else:
         # No descriptor: fall back to the node's inputs followed by its outputs.
         names = list(node.inputs) + [o.name for o in node.outputs]
         buffers = _graph_buffers(graph)
         params = tuple(buffers[n] for n in names)
         grid = block = None
+        smem_bytes = 0
 
-    return KernelSpec(kernel.name, tuple(kernel.body), params, grid, block, _constants(graph))
+    return KernelSpec(kernel.name, tuple(kernel.body), params, grid, block, _constants(graph), smem_bytes)

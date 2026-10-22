@@ -7,6 +7,7 @@
 | 2026-10-22 | skeleton + phase 1 nodes | PASS | PASS | PASS | PASS | - | - | - | - | - | - | - | - | - | - | - |
 | 2026-10-22 | robustness pass (accurate ops, typed Assign, consts) | PASS | PASS | PASS | PASS | - | - | - | - | - | - | - | - | - | - | - |
 | 2026-10-22 | phase 2: loops, Accum, WarpShuffle, Smem, Sync, Cond, TreeHalve | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | - | - | PASS | PASS | PASS | PASS | PASS |
+| 2026-10-22 | phase 3: cp.async, dynamic smem pool | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS |
 
 Extra test set (tests/problems, generated from tests/expressions_extra.py): 50/50 PASS
 (pointwise incl. sin/cos + leaky/hardtanh/elu compositions, reductions, unpinned atomic sum).
@@ -77,3 +78,15 @@ Extra test set (tests/problems, generated from tests/expressions_extra.py): 50/5
 - Fused (rmsnorm, softmax, l2norm) and attention needed nothing new: they are the same nodes
   composed. Only matmul (cp.async) is left.
 - Test harness: the shared runner times out under load -> run_all retries connect timeouts.
+
+## 2026-10-22 - phase 3: matmul (15/15 open problems)
+
+- **cp.async**: CpAsyncCopy -> `cp.async.cg.shared.global [smem], [gmem], 16` (16-byte copies
+  bypass L1; 4/8-byte use `.ca`). Commit -> `cp.async.commit_group`, Wait(n) ->
+  `cp.async.wait_group n`: m01 keeps 2 tiles in flight (a 3-stage pipeline) while computing a third.
+- **Dynamic shared memory**: m01 needs 72 KB of shared memory, over the 48 KB static limit. When
+  meta.json gives smem_bytes > 0, all Smem arrays are carved from one
+  `.extern .shared .align 16 .b8 dyn_smem[]` pool at aligned offsets (checked against smem_bytes).
+- **Bug found**: a loop with seed=True was releasing accumulators that an enclosing Init owned;
+  now a loop only releases the accumulators it seeded itself.
+- m02 (split-K) needed nothing else: atomic writes + zero_outputs already worked.
