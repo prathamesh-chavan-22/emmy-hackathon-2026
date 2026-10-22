@@ -1,17 +1,17 @@
 # Status briefing (2026-10-22, deadline Oct 27 23:59 AoE)
 
-## Score: 4/15 open problems pass (all of category 1). MVP = 8/15 (cat 1 + cat 2).
+## Score: 13/15 open problems pass (all but matmul m01/m02). MVP = 8/15 reached.
 
 | cat | problems | status |
 |---|---|---|
 | 1 pointwise | p00 p01 p02 p03 | PASS (exact match) |
-| 2 reductions | r01 r02 r03 r04 | todo - phase 2 (MVP) |
+| 2 reductions | r01 r02 r03 r04 | PASS |
 | 3 matmul | m01 m02 | todo - phase 3 |
-| 4 fused | f01 f02 f03 | todo - phase 4 |
-| 5 attention | a01 a02 | todo - phase 5 |
+| 4 fused | f01 f02 f03 | PASS (no new nodes needed) |
+| 5 attention | a01 a02 | PASS (no new nodes needed) |
 
 Run tests: `py tests/run_all.py` (or `py tests/run_all.py r0` for one category).
-Python: `py` = 3.14 (your preferred). Nothing committed to git yet.
+Python: `py` = 3.14. Repo: github.com/prathamesh-chavan-22/emmy-hackathon-2026
 
 ## DONE
 
@@ -82,12 +82,12 @@ torch/`emmy compile` never touch compile.py (rule-safe).
 ### Phase 2 - reductions r01-r04 (= MVP)
 Test set: r01-r04 + tests/problems/x_r_* (sum100, sum1000, max, sumsq, mean_rows, rowsum_wide,
 rowmax, colsum, unpinned_sum) -> `py tests/run_all.py --extra r0 x_r`
-- [ ] StridedLoop (loop: start, step, end), Accum (acc += x, starts at op identity)
-- [ ] WarpShuffle: `shfl.sync.bfly.b32` ladder 16,8,4,2,1
-- [ ] Smem (`.shared` array), Sync (`bar.sync 0`), Cond (`setp` + branch)
-- [ ] TreeHalve (combine per-warp partials through shared memory)
-- [ ] Built-in vars `lane` = tid%32, `warp` = tid/32
-- [ ] Watch out: guard branch + bar.sync = hang if some threads skip the barrier
+- [x] StridedLoop (loop: start, step, end), Accum (acc += x, starts at op identity)
+- [x] WarpShuffle: `shfl.sync.bfly.b32` ladder 16,8,4,2,1
+- [x] Smem (`.shared` array), Sync (`bar.sync 0`), Cond (`setp` + branch)
+- [x] TreeHalve (combine per-warp partials through shared memory)
+- [x] Built-in vars `lane` = tid%32, `warp` = tid/32
+- [x] Watch out: guard branch + bar.sync = hang if some threads skip the barrier
 - [ ] THEN: commit, push to YOUR public GitHub repo, submit once at
       riftstack.ai/hackathon/submit (MVP secured)
 

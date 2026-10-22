@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 
 from .emitter import Emitter
 
+MOV = {"f32": "mov.f32", "s32": "mov.b32", "pred": "mov.pred"}
+
 
 @dataclass(frozen=True)
 class Value:
@@ -18,11 +20,12 @@ class Value:
 
 @dataclass(frozen=True)
 class Buffer:
-    """A kernel parameter buffer, already converted to a global address."""
+    """A buffer the kernel addresses: a global param or a shared-memory array."""
     name: str
-    addr: str          # %rd holding the global-space base address
+    addr: str          # register with the base address (%rd for global, %r for shared)
     dtype: str
     shape: tuple[int, ...]
+    space: str = "global"   # PTX state space: "global" | "shared"
 
     @property
     def strides(self) -> tuple[int, ...]:
@@ -41,6 +44,9 @@ class Context:
     threads_launched: int | None          # grid * block, None if unknown
     constants: dict[str, float] = field(default_factory=dict)
     env: dict[str, Value] = field(default_factory=dict)
+    # Names that own a register updated in place (accumulators, carried state).
+    # Every other name is SSA: rebinding just points it at a new register.
+    mutable: dict[str, Value] = field(default_factory=dict)
 
     def bind(self, name: str, value: Value) -> None:
         self.env[name] = value
@@ -50,3 +56,29 @@ class Context:
             return self.env[name]
         except KeyError:
             raise KeyError(f"IR name {name!r} used before it is defined") from None
+
+    def move(self, dst: Value, src: Value) -> None:
+        if dst.kind == "pred" and src.is_imm:
+            self.em.emit(f"setp.ne.s32 \t{dst.text}, {int(bool(src.const))}, 0")
+        else:
+            self.em.emit(f"{MOV[dst.kind]} \t{dst.text}, {src.text}")
+
+    def declare_var(self, name: str, init: Value) -> Value:
+        """A fresh register for a mutable name, initialized to `init`."""
+        var = Value(self.em.reg(init.kind), init.kind)
+        self.move(var, init)
+        self.mutable[name] = var
+        self.env[name] = var
+        return var
+
+    def assign(self, name: str, value: Value) -> None:
+        """Set `name`: write into its own register if it is mutable, else rebind.
+
+        Loop-carried values must stay in one register across iterations, so a
+        mutable name is never re-pointed; ptxas coalesces the extra mov.
+        """
+        var = self.mutable.get(name)
+        if var is None:
+            self.env[name] = value
+        elif value.text != var.text:
+            self.move(var, value)

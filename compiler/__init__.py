@@ -7,6 +7,7 @@ from .emitter import Emitter
 from .loader import KernelSpec, load
 from .prologue import HEADER, load_params, signature
 from .stmts import lower_body
+from . import coop  # noqa: F401  registers the cross-thread statement handlers
 
 
 def compile_kernel(spec: KernelSpec) -> str:

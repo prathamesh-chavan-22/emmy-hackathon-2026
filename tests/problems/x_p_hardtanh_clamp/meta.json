@@ -1,0 +1,86 @@
+{
+ "id": "x_p_hardtanh_clamp",
+ "code": "torch.clamp(torch.randn(4096) * 2.0, -1.0, 1.0)",
+ "rtol": 0,
+ "atol": 0,
+ "graph_inputs": [
+  "x"
+ ],
+ "graph_outputs": [
+  "clamp"
+ ],
+ "kernels": [
+  {
+   "node": "clamp",
+   "entry": "k_clamp_pointwise",
+   "arg_order": [
+    "mul_c1",
+    "clamp_bound0",
+    "clamp_bound1",
+    "x",
+    "clamp"
+   ],
+   "grid": [
+    4,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      2.0
+     ]
+    },
+    {
+     "name": "clamp_bound0",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      -1.0
+     ]
+    },
+    {
+     "name": "clamp_bound1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      1.0
+     ]
+    },
+    {
+     "name": "x",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "seed": 0
+    },
+    {
+     "name": "clamp",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

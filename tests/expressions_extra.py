@@ -113,6 +113,16 @@ OPEN = [
          **TRANS),
     dict(id="x_p_mish", code="x = torch.randn(4096); x * torch.tanh(torch.nn.functional.softplus(x))",
          ref=lambda x: [f32(f64(x) * np.tanh(np.logaddexp(0.0, f64(x))))], **TRANS),
+    # third batch: activations emmy has no single op for, written the way it can trace them.
+    # Rejected by emmy 0.3.11 itself: expm1, log1p, relu6, hardsigmoid, hardswish, selu.
+    dict(id="x_p_leaky_where", code="x = torch.randn(4096); torch.where(x > 0, x, x * 0.1)",
+         ref=lambda x: [np.where(x > 0, x, x * np.float32(0.1))], **EXACT),
+    dict(id="x_p_hardtanh_clamp", code="torch.clamp(torch.randn(4096) * 2.0, -1.0, 1.0)",
+         ref=lambda x: [np.clip(x * np.float32(2), np.float32(-1), np.float32(1))], **EXACT),
+    dict(id="x_p_elu_where", code="x = torch.randn(4096); torch.where(x > 0, x, torch.exp(x) - 1.0)",
+         ref=lambda x: [f32(np.where(f64(x) > 0, f64(x), np.exp(f64(x)) - 1.0))], **TRANS),
+    dict(id="x_p_sin_cos", code="x = torch.randn(4096); torch.sin(x) + torch.cos(x)",
+         ref=lambda x: [f32(np.sin(f64(x)) + np.cos(f64(x)))], **TRANS),
 
     # ---- category 2: reductions (pinned like the open set) ----------------
     dict(id="x_r_sum100", code="torch.randn(100).sum()",

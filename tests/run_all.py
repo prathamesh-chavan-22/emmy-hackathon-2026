@@ -8,13 +8,16 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+RETRIES = 6
 
 
 def problem_dirs(root: Path) -> list[Path]:
@@ -23,9 +26,13 @@ def problem_dirs(root: Path) -> list[Path]:
 
 def run(pdir: Path) -> tuple[str, str, str, str, str]:
     problem = pdir.name
-    r = subprocess.run([sys.executable, str(ROOT / "submit.py"), str(pdir), "--compiler", str(ROOT / "compile.py")],
-                       capture_output=True, text=True, cwd=ROOT)
-    out = r.stdout + r.stderr
+    for attempt in range(RETRIES):
+        r = subprocess.run([sys.executable, str(ROOT / "submit.py"), str(pdir), "--compiler", str(ROOT / "compile.py")],
+                           capture_output=True, text=True, cwd=ROOT)
+        out = r.stdout + r.stderr
+        if "cannot reach the runner" not in out:   # the shared runner times out under load: retry
+            break
+        time.sleep(2 * (attempt + 1))
     status = "PASS" if r.returncode == 0 else "FAIL"
     regs = ",".join(re.findall(r"(\d+) registers", out)) or "-"
     times = ",".join(re.findall(r"\(([\d.]+) us\)", out)) or "-"
@@ -41,7 +48,7 @@ def main() -> int:
         args.remove("--extra")
         dirs += problem_dirs(ROOT / "tests" / "problems")
     todo = [p for p in dirs if not args or p.name.startswith(tuple(args))]
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=int(os.environ.get("JOBS", 4))) as pool:
         rows = list(pool.map(run, todo))
     print(f"{'problem':<20} {'status':<6} {'regs':<8} {'err / time':<28} detail")
     for row in rows:

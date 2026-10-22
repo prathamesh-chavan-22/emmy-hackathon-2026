@@ -32,6 +32,7 @@ def f32_imm(value: float) -> str:
 class Emitter:
     def __init__(self) -> None:
         self.lines: list[str] = []
+        self.shared: list[str] = []     # .shared array declarations
         self._counts: dict[str, int] = {}
         self._labels = 0
 
@@ -61,10 +62,13 @@ class Emitter:
         self.lines.append(f"{label}:")
 
     # -- output --------------------------------------------------------------
+    def declare_shared(self, symbol: str, nbytes: int, align: int) -> None:
+        self.shared.append(f"\t.shared .align {align} .b8 \t{symbol}[{nbytes}];")
+
     def declarations(self) -> list[str]:
-        """`.reg` lines sized to the highest index handed out per class."""
+        """`.reg` lines sized to the highest index handed out per class, then .shared arrays."""
         decls = {}
         for prefix, decl_type in REG_CLASSES.values():
             if prefix in self._counts:
                 decls[prefix] = f"\t.reg {decl_type} \t{prefix}<{self._counts[prefix] + 1}>;"
-        return list(decls.values())
+        return list(decls.values()) + self.shared

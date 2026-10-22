@@ -55,8 +55,9 @@ def load_params(ctx: Context, spec: KernelSpec) -> None:
         ctx.buffers[p.name] = Buffer(p.name, glob, p.dtype, p.shape)
 
 
-def global_thread_id(ctx: Context) -> Value:
-    """ctaid.x * ntid.x + tid.x: the flat cell this thread starts at (1-D grids)."""
+def thread_ids(ctx: Context) -> tuple[Value, Value]:
+    """(tid.x, ctaid.x * ntid.x + tid.x): block-local id for cooperative code,
+    global id = the flat cell this thread starts at (1-D grids)."""
     em = ctx.em
     tid, ctaid, ntid, gid = (em.reg("s32") for _ in range(4))
     em.emit(f"mov.u32 \t{tid}, %tid.x")
@@ -64,4 +65,4 @@ def global_thread_id(ctx: Context) -> Value:
     em.emit(f"mov.u32 \t{ntid}, %ntid.x")
     em.emit(f"mad.lo.s32 \t{gid}, {ctaid}, {ntid}, {tid}", "global thread id")
     ctx.bind("%tid", Value(tid, "s32"))
-    return Value(gid, "s32")
+    return Value(tid, "s32"), Value(gid, "s32")

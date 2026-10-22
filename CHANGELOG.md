@@ -6,9 +6,10 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-10-22 | skeleton + phase 1 nodes | PASS | PASS | PASS | PASS | - | - | - | - | - | - | - | - | - | - | - |
 | 2026-10-22 | robustness pass (accurate ops, typed Assign, consts) | PASS | PASS | PASS | PASS | - | - | - | - | - | - | - | - | - | - | - |
+| 2026-10-22 | phase 2: loops, Accum, WarpShuffle, Smem, Sync, Cond, TreeHalve | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | - | - | PASS | PASS | PASS | PASS | PASS |
 
-Extra test set (tests/problems, generated from tests/expressions_extra.py): pointwise 35/35 PASS;
-reductions/fused 10 waiting on phase 2.
+Extra test set (tests/problems, generated from tests/expressions_extra.py): 50/50 PASS
+(pointwise incl. sin/cos + leaky/hardtanh/elu compositions, reductions, unpinned atomic sum).
 
 ## 2026-10-22 - skeleton, category 1
 
@@ -54,3 +55,25 @@ reductions/fused 10 waiting on phase 2.
   so a synthetic test (x_p_short_launch: p01 on 1 block) now covers that path.
 - Also: scalar by-value params (`"scalar": true` in meta), clear errors for unknown dtypes and
   ops, UTF-8 reads in the loader (Windows default codepage would break on non-ASCII IR).
+
+## 2026-10-22 - phase 2: cooperative reductions (13/15 open problems)
+
+- **Loops.** StridedLoop and Loop share one counted-loop lowering: loop register = start,
+  top-tested `setp.ge` against the end, body, `add step`, branch back. Accumulators folded
+  directly in the loop body are seeded with their op's identity (0 for add, -inf for max)
+  just before the loop.
+- **Mutable vs SSA names.** Most IR names are SSA: assigning just rebinds the name to a new
+  register. Loop-carried values (accumulators, Init state) must stay in ONE register across
+  iterations, so the context marks them mutable and assignments become `mov` into that register.
+- **WarpShuffle** = `shfl.sync.bfly.b32` with offsets 16,8,4,2,1 and `activemask` as the member
+  mask (a small block can be a partial warp). After the butterfly every lane has the warp total.
+- **Smem** = a `.shared` array; its address is a 32-bit offset, so shared Load/Write use 32-bit
+  address math and `ld/st.shared`. Same Load/Write code path as global, different state space.
+- **TreeHalve** = per-warp partials in shared memory halved level by level (unrolled, since the
+  length is static): threads t < s fold buf[t+s] into buf[t], `bar.sync` between levels, then
+  every thread reads buf[0].
+- **Cond** = `@!p bra else`; statically-known conditions emit only the live side.
+- `lane` = tid & 31, `warp` = tid >> 5, bound when the Tile starts.
+- Fused (rmsnorm, softmax, l2norm) and attention needed nothing new: they are the same nodes
+  composed. Only matmul (cp.async) is left.
+- Test harness: the shared runner times out under load -> run_all retries connect timeouts.

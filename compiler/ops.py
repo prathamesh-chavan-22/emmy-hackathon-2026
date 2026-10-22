@@ -133,6 +133,48 @@ def _erf(em: Emitter, d: str, a: list[str]) -> None:
     em.emit(f"copysign.f32 \t{d}, {x}, {r}", "erf is odd")
 
 
+# sin/cos: Cody-Waite reduction by pi/2 (three-part constant, so x - k*pi/2 stays exact for
+# |x| up to ~1e4) and the Cephes single-precision polynomials on [-pi/4, pi/4].
+PIO2_PARTS = (1.5703125, 4.837512969970703125e-4, 7.54978995489188216e-8)
+SIN_POLY = (-1.9515295891e-4, 8.3321608736e-3, -1.6666654611e-1)
+COS_POLY = (2.443315711809948e-5, -1.388731625493765e-3, 4.166664568298827e-2)
+
+
+def _sincos(em: Emitter, d: str, x: str, quadrant_shift: int) -> None:
+    """sin (shift 0) or cos (shift 1, since cos x = sin(x + pi/2)), max error ~1e-7."""
+    k, r, z, s, c, ns, nc, lo, hi = (_f(em) for _ in range(9))
+    em.emit(f"mul.f32 \t{k}, {x}, {f32_imm(2 / math.pi)}")
+    em.emit(f"cvt.rni.f32.f32 \t{k}, {k}", "k = nearest multiple of pi/2")
+    em.emit(f"neg.f32 \t{nc}, {k}")
+    src = x
+    for part in PIO2_PARTS:
+        nxt = _f(em)
+        em.emit(f"fma.rn.f32 \t{nxt}, {nc}, {f32_imm(part)}, {src}")
+        src = nxt
+    em.emit(f"mov.f32 \t{r}, {src}", "r = x - k*pi/2 in [-pi/4, pi/4]")
+    em.emit(f"mul.f32 \t{z}, {r}, {r}")
+    ps, pz = _horner(em, SIN_POLY, z), _f(em)
+    em.emit(f"mul.f32 \t{pz}, {ps}, {z}")
+    em.emit(f"fma.rn.f32 \t{s}, {pz}, {r}, {r}", "sin r")
+    pc, pcz, half = _horner(em, COS_POLY, z), _f(em), _f(em)
+    em.emit(f"mul.f32 \t{pcz}, {pc}, {z}")
+    em.emit(f"fma.rn.f32 \t{half}, {z}, 0fBF000000, {ONE}")
+    em.emit(f"fma.rn.f32 \t{c}, {pcz}, {z}, {half}", "cos r")
+    # quadrant q = (k + shift) & 3 picks sin r / cos r / -sin r / -cos r
+    q, q1, q2 = em.reg("s32"), em.reg("b32"), em.reg("b32")
+    use_cos, negate = em.reg("pred"), em.reg("pred")
+    em.emit(f"cvt.rni.s32.f32 \t{q}, {k}")
+    if quadrant_shift:
+        em.emit(f"add.s32 \t{q}, {q}, {quadrant_shift}")
+    em.emit(f"and.b32 \t{q1}, {q}, 1")
+    em.emit(f"and.b32 \t{q2}, {q}, 2")
+    em.emit(f"setp.ne.b32 \t{use_cos}, {q1}, 0")
+    em.emit(f"setp.ne.b32 \t{negate}, {q2}, 0")
+    em.emit(f"selp.f32 \t{lo}, {c}, {s}, {use_cos}")
+    em.emit(f"neg.f32 \t{hi}, {lo}")
+    em.emit(f"selp.f32 \t{d}, {hi}, {lo}, {negate}")
+
+
 def _pow(em: Emitter, d: str, a: list[str], consts: list) -> None:
     """x^y. A constant y that is a small integer or +-0.5 gets an exact sequence;
     anything else uses 2^(y log2|x|) with C pow's sign rules for negative x."""
@@ -238,6 +280,8 @@ F32_OPS = {
     "silu": _silu,
     "tanh": _tanh,
     "erf": _erf,
+    "sin": lambda em, d, a: _sincos(em, d, a[0], 0),
+    "cos": lambda em, d, a: _sincos(em, d, a[0], 1),
     "where": _where,
     # comparisons produce .pred (IR dtype bool)
     "greater": _cmp("gt"),
