@@ -1,0 +1,64 @@
+{
+ "id": "x_p_log",
+ "code": "torch.log(torch.abs(torch.randn(4096)) + 0.5)",
+ "rtol": 1e-06,
+ "atol": 1e-06,
+ "graph_inputs": [
+  "x"
+ ],
+ "graph_outputs": [
+  "log"
+ ],
+ "kernels": [
+  {
+   "node": "log",
+   "entry": "k_log_pointwise",
+   "arg_order": [
+    "add_c1",
+    "x",
+    "log"
+   ],
+   "grid": [
+    4,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "add_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.5
+     ]
+    },
+    {
+     "name": "x",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "seed": 0
+    },
+    {
+     "name": "log",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

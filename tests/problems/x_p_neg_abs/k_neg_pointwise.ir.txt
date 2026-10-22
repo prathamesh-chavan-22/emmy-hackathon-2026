@@ -1,0 +1,7 @@
+    Tile[a0] (N=512)
+        in0__u0, in0__u1 = load x[((a0 * 2) + 0)]
+        f32 v0__u0 = abs(in0__u0)
+        f32 v1__u0 = negative(v0__u0)
+        f32 v0__u1 = abs(in0__u1)
+        f32 v1__u1 = negative(v0__u1)
+        neg[((a0 * 2) + 0)] = (v1__u0, v1__u1)

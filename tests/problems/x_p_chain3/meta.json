@@ -1,0 +1,95 @@
+{
+ "id": "x_p_chain3",
+ "code": "x = torch.randn(4096); y = torch.randn(4096); z = torch.randn(4096); (x * 1.5 + y) * z - 0.25 * x",
+ "rtol": 1e-06,
+ "atol": 1e-06,
+ "graph_inputs": [
+  "x",
+  "y",
+  "z"
+ ],
+ "graph_outputs": [
+  "sub"
+ ],
+ "kernels": [
+  {
+   "node": "sub",
+   "entry": "k_sub_pointwise",
+   "arg_order": [
+    "mul_c1",
+    "mul_2_c1",
+    "x",
+    "y",
+    "z",
+    "sub"
+   ],
+   "grid": [
+    4,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      1.5
+     ]
+    },
+    {
+     "name": "mul_2_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.25
+     ]
+    },
+    {
+     "name": "x",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "seed": 0
+    },
+    {
+     "name": "y",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "seed": 1
+    },
+    {
+     "name": "z",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "seed": 2
+    },
+    {
+     "name": "sub",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}
