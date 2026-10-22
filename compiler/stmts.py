@@ -195,11 +195,12 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> Non
     The body is a scope: only this loop's accumulators outlive it.
     """
     em = ctx.em
-    seeded = {}
     if s.seed:
+        seeded = set()
         for acc in s.body:
             if type(acc).__name__ == "Accum" and acc.name not in seeded:
-                seeded[acc.name] = ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
+                ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
+                seeded.add(acc.name)
     outer_env, outer_mutable = dict(ctx.env), dict(ctx.mutable)
     i = ctx.declare_var(s.axis.name, start)
     top, done = em.label(f"loop_{s.axis.name}"), em.label(f"loop_{s.axis.name}_end")
@@ -211,12 +212,9 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> Non
     em.emit(f"add.s32 \t{i.text}, {i.text}, {step.text}")
     em.emit(f"bra.uni \t{top}")
     em.place(done)
-    # Leave the body's scope. Seeded accumulators stay bound to their final
-    # value but stop being mutable: a later loop may seed the same name again.
+    # Leave the body's scope. Seeded accumulators live on in the enclosing block
+    # (emmy declares them there), still writable; a later seeding loop shadows them.
     ctx.env, ctx.mutable = outer_env, outer_mutable
-    for name, var in seeded.items():
-        ctx.mutable.pop(name, None)
-        ctx.env[name] = var
 
 
 @handles("StridedLoop")

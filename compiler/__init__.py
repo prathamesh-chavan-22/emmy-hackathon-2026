@@ -21,7 +21,7 @@ def compile_kernel(spec: KernelSpec) -> str:
     body = ctx.em.declarations() + [""] + ctx.em.lines
     # The dynamic pool is module-scope; it is declared once, after every Smem
     # has reported the alignment it needs.
-    pool = [f".extern .shared .align {ctx.smem_align} .b8 {DYN_POOL}[];\n"] if ctx.smem_used else []
+    pool = [f".extern .shared .align {ctx.smem_align} .b8 {DYN_POOL}[];"] if ctx.smem_used else []
     ptx = "\n".join([HEADER, *pool, signature(spec), "{", *body, "}", ""])
     ptx.encode("ascii")  # PTX rejects non-ASCII anywhere; fail here, not in ptxas
     return ptx

@@ -130,3 +130,10 @@ Code review of the phase-3 commit found 8 issues, none hitting the open set; all
 
 Known gaps for the hidden set: swizzled smem layouts (NotImplementedError), non-f32 dtypes.
 Next: more matmul/attention shapes in tests/expressions_extra.py.
+
+Second review (all 5 fixed):
+- cp.async lane offset back to emmy's `row * shape[-1] + col` (flat_index was wrong for 3-D slabs).
+- Same Smem name with the same shape in sibling scopes reuses the slot (emmy keys Smem by name).
+- Seeded accumulators stay writable after their loop; `ctx.assign` copies instead of aliasing
+  a register that is updated in place.
+- Pool bytes = prod(extents)*4 exactly like pack_smem; no stray blank line before `.extern`.

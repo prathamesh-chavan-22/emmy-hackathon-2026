@@ -83,6 +83,12 @@ class Context:
         """
         var = self.mutable.get(name)
         if var is None:
+            if any(value.text == m.text for m in self.mutable.values()):
+                # Snapshot: aliasing a register that is updated in place would let
+                # this name see later updates.
+                copy = Value(self.em.reg(value.kind), value.kind)
+                self.move(copy, value)
+                value = copy
             self.env[name] = value
         elif value.text != var.text:
             self.move(var, value)

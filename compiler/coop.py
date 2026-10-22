@@ -35,14 +35,19 @@ def lower_smem(ctx: Context, s) -> None:
     once the buffers outgrow the 48 KB static cap), every array is carved out of
     one extern pool at an aligned offset instead of being its own .shared symbol.
     """
-    if s.name in ctx.buffers:
-        raise ValueError(f"Smem {s.name!r} clashes with an existing buffer of that name")
     try:
         dt = SMEM_DTYPES[s.dtype]
     except KeyError:
         raise NotImplementedError(f"Smem dtype {s.dtype}") from None
     extents = tuple(int(e) for e in s.extents)
-    nbytes = max(1, math.prod(extents)) * 4
+    prev = ctx.buffers.get(s.name)
+    if prev is not None:
+        # emmy keys Smem by name (sibling scopes may each declare the same scratch
+        # array, sharing one slot); only a different array under that name is an error.
+        if prev.space == "shared" and prev.dtype == dt and prev.shape == extents:
+            return
+        raise ValueError(f"Smem {s.name!r} clashes with an existing buffer of that name")
+    nbytes = math.prod(extents) * 4
     em = ctx.em
     base = em.reg("s32")
     if ctx.smem_pool:
@@ -59,7 +64,7 @@ def lower_smem(ctx: Context, s) -> None:
             em.emit(f"add.s32 \t{base}, {base}, {offset}", f"{s.name} at pool+{offset}")
     else:
         symbol = f"sh_{s.name}"
-        em.declare_shared(symbol, nbytes, max(int(s.align), 16))   # 16: room for v4 access
+        em.declare_shared(symbol, max(nbytes, 4), max(int(s.align), 16))   # 16: room for v4 access
         em.emit(f"mov.u32 \t{base}, {symbol}", s.name)
     ctx.buffers[s.name] = Buffer(s.name, base, dt, extents, space="shared")
 
@@ -79,7 +84,11 @@ def lower_cp_async_copy(ctx: Context, s) -> None:
     dst_buf, src_buf = ctx.buffers[s.smem], ctx.buffers[s.src]
     dst = flat_index(ctx, dst_buf, s.smem_index)
     if s.lane_index is not None:
-        dst = X._binary(ctx, "+", dst, flat_index(ctx, dst_buf, s.lane_index))
+        # (row, col) within a stripe of the slab's innermost row length, as emmy
+        # renders it - not the buffer's leading strides (wrong for a staged 3-D slab).
+        row, col = (X.lower(ctx, e) for e in s.lane_index)
+        lane = X._binary(ctx, "+", X._binary(ctx, "*", row, X.imm(dst_buf.shape[-1])), col)
+        dst = X._binary(ctx, "+", dst, lane)
     d_base, d_off = address(ctx, dst_buf, dst)
     s_base, s_off = address(ctx, src_buf, flat_index(ctx, src_buf, s.src_index))
     cache = "cg" if s.nbytes == 16 else "ca"
