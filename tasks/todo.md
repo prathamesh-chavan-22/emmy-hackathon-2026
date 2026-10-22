@@ -113,3 +113,20 @@ rowmax, colsum, unpinned_sum) -> `py tests/run_all.py --extra r0 x_r`
 - Lowering must be our own code. emmy only for Graph.from_dict.
   No render_kernelop, no `emmy compile`, no nvcc.
 - PTX pure ASCII. Entry name = IR kernel name. Param order = meta.json arg_order.
+
+## REVIEW (2026-10-22, after phase 3)
+
+Result: 15/15 open problems + 50/50 extra tests pass on the runner.
+
+Code review of the phase-3 commit found 8 issues, none hitting the open set; all fixed:
+- Dynamic smem pool packed like emmy's `pack_smem` (align = max(4, Smem.align)), so the
+  layout always fits the `smem_bytes` emmy computed; pool base aligned to the largest
+  Smem alignment; pool declared once in `compile_kernel` instead of lazily.
+- Seeded loops always start a fresh accumulator register (shadowing outer state, as emmy's
+  `T acc = identity;` does), and a loop body is now a scope: names defined inside it are
+  dropped after the loop, only that loop's accumulators survive.
+- Duplicate Smem name -> error (was silently reused); cp.async nbytes checked (4/8/16).
+- cp.async lane offset reuses `flat_index`.
+
+Known gaps for the hidden set: swizzled smem layouts (NotImplementedError), non-f32 dtypes.
+Next: more matmul/attention shapes in tests/expressions_extra.py.

@@ -190,15 +190,17 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> Non
     """for (axis = start; axis < end; axis += step) { body }, shared by Loop and StridedLoop.
 
     Accumulators folded directly in the body start at their op's identity just
-    before the loop (unless `seed` is off: then an enclosing Init owns them).
+    before the loop, in a fresh register that shadows any outer same-named state
+    (emmy's `T acc = identity;`). With `seed` off an enclosing Init owns them.
+    The body is a scope: only this loop's accumulators outlive it.
     """
     em = ctx.em
-    seeded = []
+    seeded = {}
     if s.seed:
         for acc in s.body:
-            if type(acc).__name__ == "Accum" and acc.name not in ctx.mutable:
-                ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
-                seeded.append(acc.name)
+            if type(acc).__name__ == "Accum" and acc.name not in seeded:
+                seeded[acc.name] = ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
+    outer_env, outer_mutable = dict(ctx.env), dict(ctx.mutable)
     i = ctx.declare_var(s.axis.name, start)
     top, done = em.label(f"loop_{s.axis.name}"), em.label(f"loop_{s.axis.name}_end")
     p = em.reg("pred")
@@ -209,10 +211,12 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> Non
     em.emit(f"add.s32 \t{i.text}, {i.text}, {step.text}")
     em.emit(f"bra.uni \t{top}")
     em.place(done)
-    # Accumulators seeded here finish here (a later loop may seed the same name
-    # again); ones an enclosing Init owns stay mutable.
-    for name in seeded:
+    # Leave the body's scope. Seeded accumulators stay bound to their final
+    # value but stop being mutable: a later loop may seed the same name again.
+    ctx.env, ctx.mutable = outer_env, outer_mutable
+    for name, var in seeded.items():
         ctx.mutable.pop(name, None)
+        ctx.env[name] = var
 
 
 @handles("StridedLoop")

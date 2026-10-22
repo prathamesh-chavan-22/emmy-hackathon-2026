@@ -50,6 +50,7 @@ class Context:
     # Dynamic shared memory pool (meta smem_bytes > 0): its size and the next free byte.
     smem_pool: int = 0
     smem_used: int = 0
+    smem_align: int = 16   # pool base alignment: the largest any array asks for
 
     def bind(self, name: str, value: Value) -> None:
         self.env[name] = value

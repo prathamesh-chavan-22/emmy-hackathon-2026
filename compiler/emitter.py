@@ -33,7 +33,6 @@ class Emitter:
     def __init__(self) -> None:
         self.lines: list[str] = []
         self.shared: list[str] = []     # .shared array declarations
-        self.module: list[str] = []     # module-scope declarations (the extern smem pool)
         self._counts: dict[str, int] = {}
         self._labels = 0
 

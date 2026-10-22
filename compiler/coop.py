@@ -35,22 +35,23 @@ def lower_smem(ctx: Context, s) -> None:
     once the buffers outgrow the 48 KB static cap), every array is carved out of
     one extern pool at an aligned offset instead of being its own .shared symbol.
     """
-    if s.name in ctx.buffers:          # already declared (e.g. a re-entered scope)
-        return
+    if s.name in ctx.buffers:
+        raise ValueError(f"Smem {s.name!r} clashes with an existing buffer of that name")
     try:
         dt = SMEM_DTYPES[s.dtype]
     except KeyError:
         raise NotImplementedError(f"Smem dtype {s.dtype}") from None
     extents = tuple(int(e) for e in s.extents)
     nbytes = max(1, math.prod(extents)) * 4
-    align = max(int(s.align), 16)      # 16: room for v4 / 16-byte cp.async access
     em = ctx.em
     base = em.reg("s32")
     if ctx.smem_pool:
-        if not em.module:
-            em.module.append(f".extern .shared .align 16 .b8 {DYN_POOL}[];\n")
+        # Same packing as emmy's pack_smem (align to max(dtype size, align)), so
+        # the layout fits exactly in the smem_bytes it computed for the launch.
+        align = max(4, int(s.align))
         offset = -(-ctx.smem_used // align) * align
         ctx.smem_used = offset + nbytes
+        ctx.smem_align = max(ctx.smem_align, align)   # the pool base must honour it too
         if ctx.smem_used > ctx.smem_pool:
             raise ValueError(f"shared arrays need {ctx.smem_used} B, launch provides {ctx.smem_pool} B")
         em.emit(f"mov.u32 \t{base}, {DYN_POOL}")
@@ -58,7 +59,7 @@ def lower_smem(ctx: Context, s) -> None:
             em.emit(f"add.s32 \t{base}, {base}, {offset}", f"{s.name} at pool+{offset}")
     else:
         symbol = f"sh_{s.name}"
-        em.declare_shared(symbol, nbytes, align)
+        em.declare_shared(symbol, nbytes, max(int(s.align), 16))   # 16: room for v4 access
         em.emit(f"mov.u32 \t{base}, {symbol}", s.name)
     ctx.buffers[s.name] = Buffer(s.name, base, dt, extents, space="shared")
 
@@ -73,12 +74,12 @@ def lower_cp_async_copy(ctx: Context, s) -> None:
     """
     if s.swizzle not in ("NONE", "", None):
         raise NotImplementedError(f"cp.async swizzle {s.swizzle}")
+    if s.nbytes not in (4, 8, 16):
+        raise NotImplementedError(f"cp.async of {s.nbytes} bytes (PTX allows 4, 8, 16)")
     dst_buf, src_buf = ctx.buffers[s.smem], ctx.buffers[s.src]
     dst = flat_index(ctx, dst_buf, s.smem_index)
     if s.lane_index is not None:
-        row, col = (X.lower(ctx, e) for e in s.lane_index)
-        lane = X._binary(ctx, "+", X._binary(ctx, "*", row, X.imm(dst_buf.shape[-1])), col)
-        dst = X._binary(ctx, "+", dst, lane)
+        dst = X._binary(ctx, "+", dst, flat_index(ctx, dst_buf, s.lane_index))
     d_base, d_off = address(ctx, dst_buf, dst)
     s_base, s_off = address(ctx, src_buf, flat_index(ctx, src_buf, s.src_index))
     cache = "cg" if s.nbytes == 16 else "ca"

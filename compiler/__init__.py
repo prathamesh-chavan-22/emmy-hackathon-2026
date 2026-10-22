@@ -7,7 +7,7 @@ from .emitter import Emitter
 from .loader import KernelSpec, load
 from .prologue import HEADER, load_params, signature
 from .stmts import lower_body
-from . import coop  # noqa: F401  registers the cross-thread statement handlers
+from .coop import DYN_POOL  # importing coop also registers the cross-thread handlers
 
 
 def compile_kernel(spec: KernelSpec) -> str:
@@ -19,7 +19,10 @@ def compile_kernel(spec: KernelSpec) -> str:
     ctx.em.emit("ret")
 
     body = ctx.em.declarations() + [""] + ctx.em.lines
-    ptx = "\n".join([HEADER, *ctx.em.module, signature(spec), "{", *body, "}", ""])
+    # The dynamic pool is module-scope; it is declared once, after every Smem
+    # has reported the alignment it needs.
+    pool = [f".extern .shared .align {ctx.smem_align} .b8 {DYN_POOL}[];\n"] if ctx.smem_used else []
+    ptx = "\n".join([HEADER, *pool, signature(spec), "{", *body, "}", ""])
     ptx.encode("ascii")  # PTX rejects non-ASCII anywhere; fail here, not in ptxas
     return ptx
 
