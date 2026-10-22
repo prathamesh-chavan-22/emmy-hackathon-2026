@@ -74,13 +74,17 @@ def lower(ctx: Context, e) -> Value:
     if kind == "Literal":
         return imm(e.value)
     if kind == "BinaryExpr":
-        return _binary(ctx, e.op, lower(ctx, e.left), lower(ctx, e.right))
+        return binary(ctx, e.op, lower(ctx, e.left), lower(ctx, e.right))
     if kind == "TernaryExpr":
         return _select(ctx, lower(ctx, e.cond), lower(ctx, e.if_true), lower(ctx, e.if_false))
     raise NotImplementedError(f"expression {kind}: {e}")
 
 
-def _binary(ctx: Context, op: str, a: Value, b: Value) -> Value:
+def binary(ctx: Context, op: str, a: Value, b: Value) -> Value:
+    """`a op b` on lowered operands: folded if both are constant, else one instruction.
+
+    Also the building block for index math the statement lowerers compose themselves.
+    """
     em = ctx.em
     if a.is_imm and b.is_imm:
         return imm(_fold(op, a.const, b.const))

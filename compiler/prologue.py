@@ -1,8 +1,7 @@
-"""Kernel header, signature, parameter loads and the per-thread cell id.
+"""Kernel header, signature and parameter loads.
 
 Everything here is fixed by the launch contract rather than by the IR body:
-the PTX header, the parameter list in meta.json order, and the guard that
-keeps surplus threads (block may be wider than the Tile) out of bounds.
+the PTX header and the parameter list in meta.json order.
 """
 
 from __future__ import annotations
@@ -53,16 +52,3 @@ def load_params(ctx: Context, spec: KernelSpec) -> None:
         em.emit(f"ld.param.u64 \t{raw}, [{param_symbol(p.name)}]")
         em.emit(f"cvta.to.global.u64 \t{glob}, {raw}", p.name)
         ctx.buffers[p.name] = Buffer(p.name, glob, p.dtype, p.shape)
-
-
-def thread_ids(ctx: Context) -> tuple[Value, Value]:
-    """(tid.x, ctaid.x * ntid.x + tid.x): block-local id for cooperative code,
-    global id = the flat cell this thread starts at (1-D grids)."""
-    em = ctx.em
-    tid, ctaid, ntid, gid = (em.reg("s32") for _ in range(4))
-    em.emit(f"mov.u32 \t{tid}, %tid.x")
-    em.emit(f"mov.u32 \t{ctaid}, %ctaid.x")
-    em.emit(f"mov.u32 \t{ntid}, %ntid.x")
-    em.emit(f"mad.lo.s32 \t{gid}, {ctaid}, {ntid}, {tid}", "global thread id")
-    ctx.bind("%tid", Value(tid, "s32"))
-    return Value(tid, "s32"), Value(gid, "s32")

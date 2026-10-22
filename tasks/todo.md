@@ -38,10 +38,13 @@ Python: `py` = 3.14. Repo: github.com/prathamesh-chavan-22/emmy-hackathon-2026
    - Assign: elementwise op via ops.py. Let: bind an expression to a name.
 4. **expr.py** - index math (`a0*2+1`) lowered recursively. Constants folded at compile
    time (shapes are static), constant offsets go into `[reg+8]` addressing.
+   **coop.py** - cross-thread statements: Smem, cp.async, Sync, WarpShuffle, TreeHalve.
+   **memory.py** - address math + vectorized ld/st, shared by both statement files
+   (same code for global and shared memory; only address width and state space differ).
 5. **emitter.py** - fresh virtual registers %f1 %f2 %r1 %rd1 %p1..., declared at the top.
    No register allocation - ptxas does it.
 6. **ops.py** - table: op name (add, multiply, relu, exp, sigmoid...) -> PTX instructions.
-   **context.py** - map of IR name -> register, plus the buffers.
+   **context.py** - map of IR name -> register, the buffers, and `scope()` for nested blocks.
 
 ## DONE: robustness + diverse tests (2026-10-22) - 39/39 pointwise pass, see CHANGELOG
 

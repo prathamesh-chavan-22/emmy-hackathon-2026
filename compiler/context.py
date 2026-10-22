@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from .emitter import Emitter
@@ -74,6 +75,22 @@ class Context:
         self.mutable[name] = var
         self.env[name] = var
         return var
+
+    @contextmanager
+    def scope(self, release=()):
+        """A nested block: names bound inside it are dropped when it ends.
+
+        `release` names stop being mutable inside the block, so assignments
+        there rebind them (scratch copies) instead of overwriting the outer
+        register; the outer binding is back when the block ends.
+        """
+        outer_env, outer_mutable = dict(self.env), dict(self.mutable)
+        for name in release:
+            self.mutable.pop(name, None)
+        try:
+            yield
+        finally:
+            self.env, self.mutable = outer_env, outer_mutable
 
     def assign(self, name: str, value: Value) -> None:
         """Set `name`: write into its own register if it is mutable, else rebind.

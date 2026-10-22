@@ -10,7 +10,8 @@ import math
 
 from . import expr as X
 from .context import Buffer, Context, Value
-from .stmts import _mem, address, flat_index, handles, load_values, lower_body, store_values
+from .memory import address, flat_index, load_values, operand, store_values
+from .stmts import handles, lower_body
 
 SMEM_DTYPES = {"float": "f32"}   # Smem carries the C type name
 DYN_POOL = "dyn_smem"            # the extern pool behind dynamic shared memory
@@ -87,12 +88,12 @@ def lower_cp_async_copy(ctx: Context, s) -> None:
         # (row, col) within a stripe of the slab's innermost row length, as emmy
         # renders it - not the buffer's leading strides (wrong for a staged 3-D slab).
         row, col = (X.lower(ctx, e) for e in s.lane_index)
-        lane = X._binary(ctx, "+", X._binary(ctx, "*", row, X.imm(dst_buf.shape[-1])), col)
-        dst = X._binary(ctx, "+", dst, lane)
+        lane = X.binary(ctx, "+", X.binary(ctx, "*", row, X.imm(dst_buf.shape[-1])), col)
+        dst = X.binary(ctx, "+", dst, lane)
     d_base, d_off = address(ctx, dst_buf, dst)
     s_base, s_off = address(ctx, src_buf, flat_index(ctx, src_buf, s.src_index))
     cache = "cg" if s.nbytes == 16 else "ca"
-    ctx.em.emit(f"cp.async.{cache}.shared.global \t{_mem(d_base, d_off)}, {_mem(s_base, s_off)}, {s.nbytes}")
+    ctx.em.emit(f"cp.async.{cache}.shared.global \t{operand(d_base, d_off)}, {operand(s_base, s_off)}, {s.nbytes}")
 
 
 @handles("CpAsyncCommit")
@@ -152,38 +153,33 @@ def lower_tree_halve(ctx: Context, s) -> None:
     bufs = [ctx.buffers[b] for b in s.bufs]
     if s.inner is not None:
         iv, scale = ctx.lookup(s.inner[0]), int(s.inner[1])
-        slot_of = lambda k: X._binary(ctx, "+", X._binary(ctx, "*", k, X.imm(scale)), iv)
+        slot_of = lambda k: X.binary(ctx, "+", X.binary(ctx, "*", k, X.imm(scale)), iv)
         root = iv
     else:
         slot_of = lambda k: k
         root = X.imm(0)
 
-    saved = {st: ctx.mutable.pop(st, None) for st in s.state}
-    half = int(s.length) // 2
-    while half > 0:
-        skip = em.label("tree_skip")
-        p = em.reg("pred")
-        em.emit(f"setp.ge.s32 \t{p}, {X.to_reg(ctx, t).text}, {half}", f"tree level {half}")
-        em.emit(f"@{p} bra \t{skip}")
-        mine = slot_of(t)
-        other = slot_of(X._binary(ctx, "+", t, X.imm(half)))
-        for buf, st, sb in zip(bufs, s.state, s.state_b):
-            ctx.bind(st, load_values(ctx, buf, mine, 1)[0])
-            ctx.bind(sb, load_values(ctx, buf, other, 1)[0])
-        lower_body(ctx, s.combine_states)
-        for buf, st in zip(bufs, s.state):
-            store_values(ctx, buf, mine, [ctx.lookup(st)])
-        em.place(skip)
-        _sync(ctx, s.barrier_id, s.barrier_count)
-        half //= 2
+    # Inside the levels the state names are scratch copies of smem slots, so they
+    # must not overwrite the carried registers.
+    with ctx.scope(release=s.state):
+        half = int(s.length) // 2
+        while half > 0:
+            skip = em.label("tree_skip")
+            p = em.reg("pred")
+            em.emit(f"setp.ge.s32 \t{p}, {X.to_reg(ctx, t).text}, {half}", f"tree level {half}")
+            em.emit(f"@{p} bra \t{skip}")
+            mine = slot_of(t)
+            other = slot_of(X.binary(ctx, "+", t, X.imm(half)))
+            for buf, st, sb in zip(bufs, s.state, s.state_b):
+                ctx.bind(st, load_values(ctx, buf, mine, 1)[0])
+                ctx.bind(sb, load_values(ctx, buf, other, 1)[0])
+            lower_body(ctx, s.combine_states)
+            for buf, st in zip(bufs, s.state):
+                store_values(ctx, buf, mine, [ctx.lookup(st)])
+            em.place(skip)
+            _sync(ctx, s.barrier_id, s.barrier_count)
+            half //= 2
 
     # Every thread reads the reduced value back into its own carried state.
     for buf, st in zip(bufs, s.state):
-        v = load_values(ctx, buf, root, 1)[0]
-        var = saved.get(st)
-        if var is not None:
-            ctx.mutable[st] = var
-            ctx.move(var, v)
-            ctx.bind(st, var)
-        else:
-            ctx.bind(st, v)
+        ctx.assign(st, load_values(ctx, buf, root, 1)[0])

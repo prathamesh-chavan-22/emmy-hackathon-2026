@@ -1,8 +1,9 @@
 """Statement lowering: one function per IR statement kind, dispatched by class name.
 
 This module holds the per-thread statements (Tile, loops, Cond, Load/Write,
-Assign/Let/Accum/Init). The cross-thread ones (Smem, Sync, WarpShuffle,
-TreeHalve) live in coop.py and register into the same table.
+Assign/Let/Accum/Init). The cross-thread ones (Smem, cp.async, Sync,
+WarpShuffle, TreeHalve) live in coop.py and register into the same table.
+Address math and vector loads/stores live in memory.py.
 """
 
 from __future__ import annotations
@@ -10,11 +11,10 @@ from __future__ import annotations
 import math
 
 from . import expr as X
-from .context import Buffer, Context, Value
+from .context import Context, Value
+from .memory import flat_index, load_values, store_values
 from .ops import emit_op
-from .prologue import thread_ids
 
-DTYPE_BYTES = {"f32": 4}   # every open problem is f32; others fail loudly, not silently
 DTYPE_KIND = {"f32": "f32", "bool": "pred"}   # IR dtype -> register kind
 
 HANDLERS = {}
@@ -42,98 +42,22 @@ def dtype_name(dt) -> str:
     return "f32" if dt is None else getattr(dt, "name", str(dt))
 
 
-def dtype_bytes(dt: str) -> int:
-    try:
-        return DTYPE_BYTES[dt]
-    except KeyError:
-        raise NotImplementedError(f"dtype {dt}") from None
-
-
-# ---------------------------------------------------------------------------
-# Addressing and memory access
-# ---------------------------------------------------------------------------
-
-def flat_index(ctx: Context, buf: Buffer, index) -> Value:
-    """Row-major element offset of buf[index]; the IR gives one expression per dim."""
-    flat = X.imm(0)
-    for e, stride in zip(index, buf.strides):
-        flat = X._binary(ctx, "+", flat, X._binary(ctx, "*", X.lower(ctx, e), X.imm(stride)))
-    return flat
-
-
-def address(ctx: Context, buf: Buffer, flat: Value) -> tuple[str, int]:
-    """Address of element `flat` as (base register, constant byte offset).
-
-    A constant offset goes into PTX's free [reg+imm] addressing, so unrolled
-    cells share one base. Global addresses are 64-bit; shared ones are 32-bit
-    offsets into the shared window.
-    """
-    em = ctx.em
-    size = dtype_bytes(buf.dtype)
-    if flat.is_imm:
-        return buf.addr, flat.const * size
-    if buf.space == "shared":
-        off, addr = em.reg("s32"), em.reg("s32")
-        em.emit(f"mul.lo.s32 \t{off}, {flat.text}, {size}")
-        em.emit(f"add.s32 \t{addr}, {buf.addr}, {off}")
-        return addr, 0
-    wide, addr = em.reg("u64"), em.reg("u64")
-    em.emit(f"mul.wide.s32 \t{wide}, {flat.text}, {size}")
-    em.emit(f"add.s64 \t{addr}, {buf.addr}, {wide}")
-    return addr, 0
-
-
-def _mem(base: str, offset: int) -> str:
-    return f"[{base}+{offset}]" if offset else f"[{base}]"
-
-
-def _vector_groups(n: int) -> list[tuple[int, int]]:
-    """Split n consecutive elements into (start, width) chunks of v4/v2/scalar."""
-    out, i = [], 0
-    for w in (4, 2, 1):
-        while n - i >= w:
-            out.append((i, w))
-            i += w
-    return out
-
-
-def load_values(ctx: Context, buf: Buffer, flat: Value, count: int, names=()) -> list[Value]:
-    """Load `count` consecutive elements starting at `flat`, vectorized (v4/v2) where possible."""
-    em = ctx.em
-    dt = buf.dtype
-    base, off = address(ctx, buf, flat)
-    regs = [em.reg(dt) for _ in range(count)]
-    size = dtype_bytes(dt)
-    for start, w in _vector_groups(count):
-        dst = regs[start] if w == 1 else "{" + ", ".join(regs[start:start + w]) + "}"
-        vec = "" if w == 1 else f".v{w}"
-        note = f"{', '.join(names[start:start + w])} = {buf.name}[...]" if names else None
-        em.emit(f"ld.{buf.space}{vec}.{dt} \t{dst}, {_mem(base, off + start * size)}", note)
-    return [Value(r, dt) for r in regs]
-
-
-def store_values(ctx: Context, buf: Buffer, flat: Value, values: list[Value], atomic=False, names=()) -> None:
-    """Store consecutive elements: vector st, or one red.add per element when atomic."""
-    em = ctx.em
-    dt = buf.dtype
-    base, off = address(ctx, buf, flat)
-    vals = [X.to_reg(ctx, v).text for v in values]
-    size = dtype_bytes(dt)
-    if atomic:
-        # No vector red.add for f32 before sm_90: one reduction per element.
-        for i, v in enumerate(vals):
-            em.emit(f"red.{buf.space}.add.{dt} \t{_mem(base, off + i * size)}, {v}")
-        return
-    for start, w in _vector_groups(len(vals)):
-        src = vals[start] if w == 1 else "{" + ", ".join(vals[start:start + w]) + "}"
-        vec = "" if w == 1 else f".v{w}"
-        note = f"{buf.name}[...] = {', '.join(names[start:start + w])}" if names else None
-        em.emit(f"st.{buf.space}{vec}.{dt} \t{_mem(base, off + start * size)}, {src}", note)
-
-
 # ---------------------------------------------------------------------------
 # Structure: Tile, loops, Cond
 # ---------------------------------------------------------------------------
+
+def thread_ids(ctx: Context) -> tuple[Value, Value]:
+    """(tid.x, ctaid.x * ntid.x + tid.x): block-local id for cooperative code,
+    global id = the flat cell this thread starts at (1-D grids)."""
+    em = ctx.em
+    tid, ctaid, ntid, gid = (em.reg("s32") for _ in range(4))
+    em.emit(f"mov.u32 \t{tid}, %tid.x")
+    em.emit(f"mov.u32 \t{ctaid}, %ctaid.x")
+    em.emit(f"mov.u32 \t{ntid}, %ntid.x")
+    em.emit(f"mad.lo.s32 \t{gid}, {ctaid}, {ntid}, {tid}", "global thread id")
+    ctx.bind("%tid", Value(tid, "s32"))
+    return Value(tid, "s32"), Value(gid, "s32")
+
 
 @handles("Tile")
 def lower_tile(ctx: Context, s) -> None:
@@ -174,8 +98,8 @@ def lower_tile(ctx: Context, s) -> None:
         if i == 0:
             ctx.bind(name, rest)
             break
-        ctx.bind(name, X._binary(ctx, "%", rest, X.imm(extents[i])))
-        rest = X._binary(ctx, "/", rest, X.imm(extents[i]))
+        ctx.bind(name, X.binary(ctx, "%", rest, X.imm(extents[i])))
+        rest = X.binary(ctx, "/", rest, X.imm(extents[i]))
 
     em.comment(f"Tile {[a.name for a in s.axes]} N={n}")
     lower_body(ctx, s.body)
@@ -201,20 +125,19 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> Non
             if type(acc).__name__ == "Accum" and acc.name not in seeded:
                 ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
                 seeded.add(acc.name)
-    outer_env, outer_mutable = dict(ctx.env), dict(ctx.mutable)
-    i = ctx.declare_var(s.axis.name, start)
-    top, done = em.label(f"loop_{s.axis.name}"), em.label(f"loop_{s.axis.name}_end")
-    p = em.reg("pred")
-    em.place(top)
-    em.emit(f"setp.ge.s32 \t{p}, {i.text}, {end.text}", f"{s.axis.name} < {end.text}")
-    em.emit(f"@{p} bra \t{done}")
-    lower_body(ctx, s.body)
-    em.emit(f"add.s32 \t{i.text}, {i.text}, {step.text}")
-    em.emit(f"bra.uni \t{top}")
-    em.place(done)
-    # Leave the body's scope. Seeded accumulators live on in the enclosing block
-    # (emmy declares them there), still writable; a later seeding loop shadows them.
-    ctx.env, ctx.mutable = outer_env, outer_mutable
+    # Seeded accumulators were declared outside the body's scope, so they live on
+    # in the enclosing block (as in emmy's C), still writable.
+    with ctx.scope():
+        i = ctx.declare_var(s.axis.name, start)
+        top, done = em.label(f"loop_{s.axis.name}"), em.label(f"loop_{s.axis.name}_end")
+        p = em.reg("pred")
+        em.place(top)
+        em.emit(f"setp.ge.s32 \t{p}, {i.text}, {end.text}", f"{s.axis.name} < {end.text}")
+        em.emit(f"@{p} bra \t{done}")
+        lower_body(ctx, s.body)
+        em.emit(f"add.s32 \t{i.text}, {i.text}, {step.text}")
+        em.emit(f"bra.uni \t{top}")
+        em.place(done)
 
 
 @handles("StridedLoop")
@@ -241,7 +164,7 @@ def lower_cond(ctx: Context, s) -> None:
         lower_body(ctx, s.body if p.const else s.else_body)
         return
     if p.kind != "pred":
-        p = X._binary(ctx, "!=", p, X.imm(0))
+        p = X.binary(ctx, "!=", p, X.imm(0))
     end = em.label("endif")
     skip = em.label("else") if s.else_body else end
     em.emit(f"@!{p.text} bra \t{skip}")
