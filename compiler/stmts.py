@@ -16,6 +16,7 @@ from .memory import flat_index, load_values, store_values
 from .ops import emit_op, signature
 
 DTYPE_KIND = {"f32": "f32", "bool": "pred"}   # IR dtype -> register kind
+PARTIAL = 8    # copies per trip for innermost loops without emmy's unroll flag
 
 HANDLERS = {}
 
@@ -119,34 +120,81 @@ def lower_tile(ctx: Context, s) -> None:
     em.place(end)
 
 
-def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value) -> None:
+def _seed_accumulators(ctx: Context, s) -> None:
+    """Start each accumulator the loop body folds into at its op's identity (when `seed`)."""
+    if not s.seed:
+        return
+    seeded = set()
+    for acc in s.body:
+        if type(acc).__name__ == "Accum" and acc.name not in seeded:
+            ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
+            seeded.add(acc.name)
+
+
+def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value, copies: int = 1) -> None:
     """for (axis = start; axis < end; axis += step) { body }, shared by Loop and StridedLoop.
 
     Accumulators folded directly in the body start at their op's identity just
     before the loop, in a fresh register that shadows any outer same-named state
     (emmy's `T acc = identity;`). With `seed` off an enclosing Init owns them.
     The body is a scope: only this loop's accumulators outlive it.
+
+    `copies` > 1 (constant step only) first runs the body `copies` times per trip
+    while all of them are in range, copy k seeing the axis as `axis + k*step`,
+    then finishes the remainder one at a time. Each thread performs exactly the
+    same operations in the same order, so results are bit-identical.
     """
     em = ctx.em
-    if s.seed:
-        seeded = set()
-        for acc in s.body:
-            if type(acc).__name__ == "Accum" and acc.name not in seeded:
-                ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
-                seeded.add(acc.name)
+    _seed_accumulators(ctx, s)
     # Seeded accumulators were declared outside the body's scope, so they live on
     # in the enclosing block (as in emmy's C), still writable.
     with ctx.scope():
         i = ctx.declare_var(s.axis.name, start)
-        top, done = em.label(f"loop_{s.axis.name}"), em.label(f"loop_{s.axis.name}_end")
+        name = s.axis.name
+        if copies > 1:
+            # No remainder when the trip count is static and divisible: then the
+            # last copy is in range whenever the first is.
+            exact = end.is_imm and start.is_imm and (end.const - start.const) % (copies * step.const) == 0
+            last = 0 if exact else (copies - 1) * step.const
+            top, done = em.label(f"loop_{name}_x{copies}"), em.label(f"loop_{name}_x{copies}_end")
+            em.place(top)
+            p = X.binary(ctx, ">=", X.binary(ctx, "+", i, X.imm(last)), end)
+            em.emit(f"@{p.text} bra 	{done}", f"all {copies} of {name}..{name}+{last} < {end.text}?")
+            for k in range(copies):
+                with ctx.scope():
+                    off = k * step.const
+                    ctx.bind(name, X.binary(ctx, "+", i, X.imm(off)))
+                    ctx.offsets[name] = (i, off)
+                    lower_body(ctx, s.body)
+            em.emit(f"add.s32 	{i.text}, {i.text}, {copies * step.const}")
+            em.emit(f"bra.uni 	{top}")
+            em.place(done)
+            if exact:
+                return
+        top, done = em.label(f"loop_{name}"), em.label(f"loop_{name}_end")
         p = em.reg("pred")
         em.place(top)
-        em.emit(f"setp.ge.s32 \t{p}, {i.text}, {end.text}", f"{s.axis.name} < {end.text}")
-        em.emit(f"@{p} bra \t{done}")
+        em.emit(f"setp.ge.s32 	{p}, {i.text}, {end.text}", f"{name} < {end.text}")
+        em.emit(f"@{p} bra 	{done}")
         lower_body(ctx, s.body)
-        em.emit(f"add.s32 \t{i.text}, {i.text}, {step.text}")
-        em.emit(f"bra.uni \t{top}")
+        em.emit(f"add.s32 	{i.text}, {i.text}, {step.text}")
+        em.emit(f"bra.uni 	{top}")
         em.place(done)
+
+
+def _copies(s, step: Value) -> int:
+    """How many body copies per trip for a loop (1 = rolled); see lower_loop."""
+    return PARTIAL if step.is_imm and step.const > 0 and not _has_loop(s.body) else 1
+
+
+def _has_loop(body) -> bool:
+    for b in body:
+        kind = type(b).__name__
+        if kind in ("Loop", "StridedLoop"):
+            return True
+        if kind == "Cond" and (_has_loop(b.body) or _has_loop(b.else_body or ())):
+            return True
+    return False
 
 
 @handles("StridedLoop")
@@ -155,13 +203,36 @@ def lower_strided_loop(ctx: Context, s) -> None:
     end = X.lower(ctx, s.end) if s.end is not None else X.imm(int(s.axis.extent.value))
     if s.end is not None:
         ctx.bind(f"{s.axis.name}_end", end)   # emmy lets the body reference the hoisted bound
-    _counted_loop(ctx, s, X.lower(ctx, s.start), X.lower(ctx, s.step), end)
+    step = X.lower(ctx, s.step)
+    _counted_loop(ctx, s, X.lower(ctx, s.start), step, end, _copies(s, step))
 
 
 @handles("Loop")
 def lower_loop(ctx: Context, s) -> None:
-    """Serial loop over the whole axis: 0, 1, ..., extent-1."""
-    _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(int(s.axis.extent.value)))
+    """Serial loop over the whole axis: 0, 1, ..., extent-1.
+
+    Innermost loops are unrolled, as nvcc does for emmy's C:
+    - `unroll` (emmy's `#pragma unroll`, set on hot loops such as a matmul's
+      k-step): fully, the axis a constant, so index math folds into immediate
+      address offsets.
+    - otherwise PARTIAL copies per trip (plus a remainder loop), so several loads
+      are in flight per trip instead of one latency-bound chain. Strided loops
+      get the same treatment.
+    A loop holding other loops stays rolled: copying whole loops bought nothing
+    and ran attention out of registers (255, spilling: 5x slower).
+    """
+    extent = int(s.axis.extent.value)
+    if _has_loop(s.body):
+        _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent))
+    elif s.unroll:
+        _seed_accumulators(ctx, s)
+        for i in range(extent):
+            with ctx.scope():
+                ctx.bind(s.axis.name, X.imm(i))
+                lower_body(ctx, s.body)
+    else:
+        copies = _copies(s, X.imm(1)) if extent >= 2 * PARTIAL else 1
+        _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent), copies)
 
 
 @handles("Cond")

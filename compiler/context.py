@@ -48,6 +48,9 @@ class Context:
     # Names that own a register updated in place (accumulators, carried state).
     # Every other name is SSA: rebinding just points it at a new register.
     mutable: dict[str, Value] = field(default_factory=dict)
+    # Names known to equal (register + constant), e.g. an unrolled copy's `i + 2`.
+    # Index lowering reads this to put the constant in the address immediate.
+    offsets: dict[str, tuple[Value, int]] = field(default_factory=dict)
     # Dynamic shared memory pool (meta smem_bytes > 0): its size and the next free byte.
     smem_pool: int = 0
     smem_used: int = 0
@@ -84,13 +87,13 @@ class Context:
         there rebind them (scratch copies) instead of overwriting the outer
         register; the outer binding is back when the block ends.
         """
-        outer_env, outer_mutable = dict(self.env), dict(self.mutable)
+        outer = dict(self.env), dict(self.mutable), dict(self.offsets)
         for name in release:
             self.mutable.pop(name, None)
         try:
             yield
         finally:
-            self.env, self.mutable = outer_env, outer_mutable
+            self.env, self.mutable, self.offsets = outer
 
     def assign(self, name: str, value: Value) -> None:
         """Set `name`: write into its own register if it is mutable, else rebind.

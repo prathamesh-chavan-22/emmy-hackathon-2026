@@ -10,7 +10,7 @@ import math
 
 from . import expr as X
 from .context import Buffer, Context, Value
-from .memory import address, flat_index, load_values, operand, store_values
+from .memory import address, at, flat_index, load_values, operand, store_values
 from .stmts import handles, lower_body
 
 SMEM_DTYPES = {"float": "f32"}   # Smem carries the C type name
@@ -89,7 +89,7 @@ def lower_cp_async_copy(ctx: Context, s) -> None:
         # renders it - not the buffer's leading strides (wrong for a staged 3-D slab).
         row, col = (X.lower(ctx, e) for e in s.lane_index)
         lane = X.binary(ctx, "+", X.binary(ctx, "*", row, X.imm(dst_buf.shape[-1])), col)
-        dst = X.binary(ctx, "+", dst, lane)
+        dst = (X.binary(ctx, "+", dst[0], lane), dst[1])
     d_base, d_off = address(ctx, dst_buf, dst)
     s_base, s_off = address(ctx, src_buf, flat_index(ctx, src_buf, s.src_index))
     cache = "cg" if s.nbytes == 16 else "ca"
@@ -176,15 +176,15 @@ def lower_tree_halve(ctx: Context, s) -> None:
             mine = slot_of(t)
             other = slot_of(X.binary(ctx, "+", t, X.imm(half)))
             for buf, st, sb in zip(bufs, s.state, s.state_b):
-                ctx.bind(st, load_values(ctx, buf, mine, 1)[0])
-                ctx.bind(sb, load_values(ctx, buf, other, 1)[0])
+                ctx.bind(st, load_values(ctx, buf, at(mine), 1)[0])
+                ctx.bind(sb, load_values(ctx, buf, at(other), 1)[0])
             lower_body(ctx, s.combine_states)
             for buf, st in zip(bufs, s.state):
-                store_values(ctx, buf, mine, [ctx.lookup(st)])
+                store_values(ctx, buf, at(mine), [ctx.lookup(st)])
             em.place(skip)
             _sync(ctx, s.barrier_id, s.barrier_count)
             half //= 2
 
     # Every thread reads the reduced value back into its own carried state.
     for buf, st in zip(bufs, s.state):
-        ctx.assign(st, load_values(ctx, buf, root, 1)[0])
+        ctx.assign(st, load_values(ctx, buf, at(root), 1)[0])

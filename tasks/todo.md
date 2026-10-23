@@ -156,3 +156,6 @@ Op/statement audit (2026-10-23):
 - Fixed: bool<->f32 mixing (ops.signature + expr.convert). PTX of all old tests unchanged.
 - Test gotcha: every generated input is standard normal - `torch.rand()` in a spec is NOT
   what the runner feeds, and constants are not passed to `ref`.
+
+Speed pass (2026-10-23): affine index offsets + full/partial unroll. m01 114->78us,
+a01 218->171, a02 100->54, r02 39->31. 100/100 still pass. See CHANGELOG.

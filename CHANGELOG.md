@@ -129,3 +129,25 @@ kinds it computes in (`ops.signature`), and `expr.convert` applies C's rules at 
 
 New tests: 4 mask mixes, cumsum (a scan) over 1-D and rows, softmax over dim 0, mean over the
 middle axis, softsign, tanhshrink, pow with a tensor exponent, negative integer power.
+
+## 2026-10-23 - speed: unrolling and constant address offsets (15/15 open, 85/85 extra)
+
+Same schedules emmy chose; better instructions inside them. Measured on the runner (RTX 5090):
+
+| problem | before | after |
+|---|---|---|
+| m01 matmul 512 | 114 us | ~78 us |
+| a01 attention | 218 us | ~171 us |
+| a02 attention 128 | 100 us | ~54 us |
+| r02 big sum | 39 us | ~31 us |
+
+- **Affine index lowering** (memory.py): an index is split into (register part, constant
+  part); the constant rides PTX's free `[reg+imm]` address offset instead of costing an add.
+- **Full unroll** of loops emmy marks `unroll` (its `#pragma unroll`, e.g. a matmul's k-step):
+  the loop variable becomes a constant, so every address in the body shares one base register.
+- **Partial unroll** (8 copies per trip, plus a remainder loop) of other innermost loops,
+  including strided ones: 8 loads in flight instead of one latency-bound chain. Each thread
+  still does the same operations in the same order, so results are bit-identical.
+- Lesson: unrolling a loop that CONTAINS loops ran attention out of registers (255, spilling,
+  5x slower), so only innermost loops are unrolled. And ptxas is sensitive: a needless
+  `i + 7 < 32` trip guard (instead of `i < 32`) cost a02 25%.

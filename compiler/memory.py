@@ -21,15 +21,48 @@ def dtype_bytes(dt: str) -> int:
         raise NotImplementedError(f"dtype {dt}") from None
 
 
-def flat_index(ctx: Context, buf: Buffer, index) -> Value:
+# An element offset is (dynamic part, constant part). Keeping the constant apart
+# lets it ride the [reg+imm] address immediate instead of costing an add, which
+# is what makes unrolled loops cheap: buf[i + 3] reuses buf[i]'s base register.
+Offset = tuple[Value, int]
+
+
+def at(v: Value) -> Offset:
+    """A lowered element offset as an Offset."""
+    return (X.imm(0), v.const) if v.is_imm else (v, 0)
+
+
+def _affine(ctx: Context, e) -> Offset:
+    """Lower an index expression, pulling constants out through + - and *k."""
+    if type(e).__name__ == "BinaryExpr" and e.op in ("+", "-", "*"):
+        (da, ca), (db, cb) = _affine(ctx, e.left), _affine(ctx, e.right)
+        if e.op == "+":
+            return X.binary(ctx, "+", da, db), ca + cb
+        if e.op == "-":
+            return X.binary(ctx, "-", da, db), ca - cb
+        if db.is_imm:                 # (da + ca) * cb
+            return X.binary(ctx, "*", da, X.imm(cb)), ca * cb
+        if da.is_imm:                 # ca * (db + cb)
+            return X.binary(ctx, "*", X.imm(ca), db), ca * cb
+        # dynamic * dynamic: no constant to pull out
+        whole = [X.binary(ctx, "+", d, X.imm(c)) for d, c in ((da, ca), (db, cb))]
+        return X.binary(ctx, "*", *whole), 0
+    if type(e).__name__ == "Var" and e.name in ctx.offsets:
+        return ctx.offsets[e.name]
+    return at(X.lower(ctx, e))
+
+
+def flat_index(ctx: Context, buf: Buffer, index) -> Offset:
     """Row-major element offset of buf[index]; the IR gives one expression per dim."""
-    flat = X.imm(0)
+    dyn, const = X.imm(0), 0
     for e, stride in zip(index, buf.strides):
-        flat = X.binary(ctx, "+", flat, X.binary(ctx, "*", X.lower(ctx, e), X.imm(stride)))
-    return flat
+        d, c = _affine(ctx, e)
+        dyn = X.binary(ctx, "+", dyn, X.binary(ctx, "*", d, X.imm(stride)))
+        const += c * stride
+    return dyn, const
 
 
-def address(ctx: Context, buf: Buffer, flat: Value) -> tuple[str, int]:
+def address(ctx: Context, buf: Buffer, flat: Offset) -> tuple[str, int]:
     """Address of element `flat` as (base register, constant byte offset).
 
     A constant offset goes into PTX's free [reg+imm] addressing, so unrolled
@@ -38,16 +71,17 @@ def address(ctx: Context, buf: Buffer, flat: Value) -> tuple[str, int]:
     """
     em = ctx.em
     size = dtype_bytes(buf.dtype)
-    if flat.is_imm:
-        return buf.addr, flat.const * size
-    # base + flat * size in one multiply-add (mad.wide widens the index to 64-bit).
+    dyn, const = flat
+    if dyn.is_imm:
+        return buf.addr, (dyn.const + const) * size
+    # base + dyn * size in one multiply-add (mad.wide widens the index to 64-bit).
     if buf.space == "shared":
         addr = em.reg("s32")
-        em.emit(f"mad.lo.s32 \t{addr}, {flat.text}, {size}, {buf.addr}")
-        return addr, 0
+        em.emit(f"mad.lo.s32 	{addr}, {dyn.text}, {size}, {buf.addr}")
+        return addr, const * size
     addr = em.reg("u64")
-    em.emit(f"mad.wide.s32 \t{addr}, {flat.text}, {size}, {buf.addr}")
-    return addr, 0
+    em.emit(f"mad.wide.s32 	{addr}, {dyn.text}, {size}, {buf.addr}")
+    return addr, const * size
 
 
 def operand(base: str, offset: int) -> str:
@@ -65,7 +99,7 @@ def _vector_groups(n: int) -> list[tuple[int, int]]:
     return out
 
 
-def load_values(ctx: Context, buf: Buffer, flat: Value, count: int, names=()) -> list[Value]:
+def load_values(ctx: Context, buf: Buffer, flat: Offset, count: int, names=()) -> list[Value]:
     """Load `count` consecutive elements starting at `flat`, vectorized (v4/v2) where possible."""
     em = ctx.em
     dt = buf.dtype
@@ -80,7 +114,7 @@ def load_values(ctx: Context, buf: Buffer, flat: Value, count: int, names=()) ->
     return [Value(r, dt) for r in regs]
 
 
-def store_values(ctx: Context, buf: Buffer, flat: Value, values: list[Value], atomic=False, names=()) -> None:
+def store_values(ctx: Context, buf: Buffer, flat: Offset, values: list[Value], atomic=False, names=()) -> None:
     """Store consecutive elements: vector st, or one red.add per element when atomic."""
     em = ctx.em
     dt = buf.dtype
