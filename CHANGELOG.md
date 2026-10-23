@@ -151,3 +151,20 @@ Same schedules emmy chose; better instructions inside them. Measured on the runn
 - Lesson: unrolling a loop that CONTAINS loops ran attention out of registers (255, spilling,
   5x slower), so only innermost loops are unrolled. And ptxas is sensitive: a needless
   `i + 7 < 32` trip guard (instead of `i < 32`) cost a02 25%.
+
+## 2026-10-23 - shape sweep, exact rounding, review round 4 (15/15 open, 86/86 extra, 43/43 sweep)
+
+- **Shape sweep** (tests/expressions_sweep.py): 43 hidden-set-like problems at sizes the open
+  set never shows: 1000^3 / 1024^3 / 1x512x512 / 512x512x1 / 33x65x17 matmuls, attention up to
+  1024 tokens and head dim 128, sums over 1M and a prime length, reductions with emmy's default
+  schedule as well as the pinned one, big softmax / layernorm / log-softmax. All pass.
+- **Bug found by the sweep**: `a * b + c` was off in the last bit. Our `mul.f32` / `add.f32`
+  carry no rounding mode, so ptxas may fuse them into one fma (one rounding instead of two).
+  numpy rounds twice, and a pointwise problem can be checked exactly. Fix: the IR's own
+  arithmetic uses `.rn` (never fused, bit-exact with numpy); accumulations `acc += a*b` emit
+  `fma.rn` explicitly, as nvcc does for emmy's C, so matmul keeps its speed.
+- **Review round 4 fixes**: full unroll capped at 64 copies; strided loops with too few trips stay
+  rolled; rebinding a name drops its `i + k` addressing form; bool -> float writes use the
+  register kind; literal TABs in emitted strings back to `\t`.
+- Not changed: comparisons on index ints go through f32 (emmy's C promotes them the same way);
+  `any`/`all` folds (emmy cannot trace them).

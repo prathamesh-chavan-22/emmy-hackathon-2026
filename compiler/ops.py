@@ -248,10 +248,13 @@ def _sign(em: Emitter, d: str, a: list[str]) -> None:
     em.emit(f"selp.f32 \t{d}, {a[0]}, {s}, {p}")
 
 
+# The IR's own arithmetic rounds each op separately (.rn), as numpy does, so
+# pointwise results match bit for bit; without .rn ptxas may fuse a*b+c into one
+# fma, which differs in the last bit. Accumulations fuse explicitly (lower_accum).
 F32_OPS = {
-    "add": _simple("add.f32"),
-    "subtract": _simple("sub.f32"),
-    "multiply": _simple("mul.f32"),
+    "add": _simple("add.rn.f32"),
+    "subtract": _simple("sub.rn.f32"),
+    "multiply": _simple("mul.rn.f32"),
     "divide": _simple("div.rn.f32"),
     "true_divide": _simple("div.rn.f32"),
     "maximum": _simple("max.f32"),
@@ -264,7 +267,7 @@ F32_OPS = {
     "reciprocal": _simple("rcp.rn.f32"),
     "copy": _simple("mov.f32"),
     "pad": _simple("mov.f32"),               # emmy renders pad as the identity, like copy
-    "square": lambda em, d, a: em.emit(f"mul.f32 \t{d}, {a[0]}, {a[0]}"),
+    "square": lambda em, d, a: em.emit(f"mul.rn.f32 \t{d}, {a[0]}, {a[0]}"),
     "relu": lambda em, d, a: em.emit(f"max.f32 \t{d}, {a[0]}, {ZERO}"),
     "floor": _simple("cvt.rmi.f32.f32"),
     "ceil": _simple("cvt.rpi.f32.f32"),

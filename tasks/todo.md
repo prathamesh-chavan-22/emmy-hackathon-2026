@@ -1,6 +1,6 @@
 # Status briefing (2026-10-22, deadline Oct 27 23:59 AoE)
 
-## Score: 15/15 open problems pass. 85/85 extra tests pass.
+## Score: 15/15 open problems pass. 86/86 extra tests pass. 43/43 shape sweep pass.
 
 | cat | problems | status |
 |---|---|---|
@@ -159,3 +159,7 @@ Op/statement audit (2026-10-23):
 
 Speed pass (2026-10-23): affine index offsets + full/partial unroll. m01 114->78us,
 a01 218->171, a02 100->54, r02 39->31. 100/100 still pass. See CHANGELOG.
+
+Review round 4 + shape sweep (2026-10-23): see CHANGELOG. Exact .rn rounding for elementwise,
+explicit fma.rn for Accum. Sweep: `py tests/run_all.py --sweep` (regenerate tests/sweep first).
+Runner rejects inputs of 8M+ elements (HTTP 422).

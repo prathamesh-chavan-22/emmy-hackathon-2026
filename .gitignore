@@ -7,3 +7,6 @@ hidden/
 hidden_full/
 expressions_hidden.py
 .venv-gen/
+
+# shape sweep: 54 MB of generated problems, rebuilt from tests/expressions_sweep.py
+tests/sweep/

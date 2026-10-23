@@ -51,6 +51,9 @@ class Context:
     # Names known to equal (register + constant), e.g. an unrolled copy's `i + 2`.
     # Index lowering reads this to put the constant in the address immediate.
     offsets: dict[str, tuple[Value, int]] = field(default_factory=dict)
+    # Result register of each `multiply` -> its operand registers, so an Accum
+    # can fold `acc + a*b` into one fma (registers are unique: no scoping needed).
+    products: dict[str, tuple[str, str]] = field(default_factory=dict)
     # Dynamic shared memory pool (meta smem_bytes > 0): its size and the next free byte.
     smem_pool: int = 0
     smem_used: int = 0
@@ -58,6 +61,7 @@ class Context:
 
     def bind(self, name: str, value: Value) -> None:
         self.env[name] = value
+        self.offsets.pop(name, None)   # a stale `i + k` form would mis-address
 
     def lookup(self, name: str) -> Value:
         try:
@@ -110,5 +114,6 @@ class Context:
                 self.move(copy, value)
                 value = copy
             self.env[name] = value
+            self.offsets.pop(name, None)
         elif value.text != var.text:
             self.move(var, value)

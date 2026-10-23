@@ -4,6 +4,7 @@
     python tests/run_all.py            # all open problems
     python tests/run_all.py p0 r0      # only problems whose id starts with a prefix
     python tests/run_all.py --extra    # also our generated tests in tests/problems
+    python tests/run_all.py --sweep    # also the shape sweep in tests/sweep
 """
 
 from __future__ import annotations
@@ -47,6 +48,9 @@ def main() -> int:
     if "--extra" in args:
         args.remove("--extra")
         dirs += problem_dirs(ROOT / "tests" / "problems")
+    if "--sweep" in args:   # large/odd shapes from tests/expressions_sweep.py
+        args.remove("--sweep")
+        dirs += problem_dirs(ROOT / "tests" / "sweep")
     todo = [p for p in dirs if not args or p.name.startswith(tuple(args))]
     with ThreadPoolExecutor(max_workers=int(os.environ.get("JOBS", 4))) as pool:
         rows = list(pool.map(run, todo))

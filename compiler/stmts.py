@@ -17,6 +17,7 @@ from .ops import emit_op, signature
 
 DTYPE_KIND = {"f32": "f32", "bool": "pred"}   # IR dtype -> register kind
 PARTIAL = 8    # copies per trip for innermost loops without emmy's unroll flag
+FULL_UNROLL_MAX = 64   # emmy marks extents up to 64; anything longer gets PARTIAL instead
 
 HANDLERS = {}
 
@@ -159,32 +160,40 @@ def _counted_loop(ctx: Context, s, start: Value, step: Value, end: Value, copies
             top, done = em.label(f"loop_{name}_x{copies}"), em.label(f"loop_{name}_x{copies}_end")
             em.place(top)
             p = X.binary(ctx, ">=", X.binary(ctx, "+", i, X.imm(last)), end)
-            em.emit(f"@{p.text} bra 	{done}", f"all {copies} of {name}..{name}+{last} < {end.text}?")
+            em.emit(f"@{p.text} bra \t{done}", f"all {copies} of {name}..{name}+{last} < {end.text}?")
             for k in range(copies):
                 with ctx.scope():
                     off = k * step.const
                     ctx.bind(name, X.binary(ctx, "+", i, X.imm(off)))
                     ctx.offsets[name] = (i, off)
                     lower_body(ctx, s.body)
-            em.emit(f"add.s32 	{i.text}, {i.text}, {copies * step.const}")
-            em.emit(f"bra.uni 	{top}")
+            em.emit(f"add.s32 \t{i.text}, {i.text}, {copies * step.const}")
+            em.emit(f"bra.uni \t{top}")
             em.place(done)
             if exact:
                 return
         top, done = em.label(f"loop_{name}"), em.label(f"loop_{name}_end")
         p = em.reg("pred")
         em.place(top)
-        em.emit(f"setp.ge.s32 	{p}, {i.text}, {end.text}", f"{name} < {end.text}")
-        em.emit(f"@{p} bra 	{done}")
+        em.emit(f"setp.ge.s32 \t{p}, {i.text}, {end.text}", f"{name} < {end.text}")
+        em.emit(f"@{p} bra \t{done}")
         lower_body(ctx, s.body)
-        em.emit(f"add.s32 	{i.text}, {i.text}, {step.text}")
-        em.emit(f"bra.uni 	{top}")
+        em.emit(f"add.s32 \t{i.text}, {i.text}, {step.text}")
+        em.emit(f"bra.uni \t{top}")
         em.place(done)
 
 
-def _copies(s, step: Value) -> int:
-    """How many body copies per trip for a loop (1 = rolled); see lower_loop."""
-    return PARTIAL if step.is_imm and step.const > 0 and not _has_loop(s.body) else 1
+def _strided_copies(s, step: Value, end: Value) -> int:
+    """Body copies per trip for a StridedLoop (1 = rolled); see lower_loop.
+
+    Needs a constant step, and enough trips (start is below one step, so about
+    end/step of them) for a full group of copies to run at least twice.
+    """
+    if not (step.is_imm and step.const > 0) or _has_loop(s.body):
+        return 1
+    if end.is_imm and end.const < 2 * PARTIAL * step.const:
+        return 1
+    return PARTIAL
 
 
 def _has_loop(body) -> bool:
@@ -204,7 +213,7 @@ def lower_strided_loop(ctx: Context, s) -> None:
     if s.end is not None:
         ctx.bind(f"{s.axis.name}_end", end)   # emmy lets the body reference the hoisted bound
     step = X.lower(ctx, s.step)
-    _counted_loop(ctx, s, X.lower(ctx, s.start), step, end, _copies(s, step))
+    _counted_loop(ctx, s, X.lower(ctx, s.start), step, end, _strided_copies(s, step, end))
 
 
 @handles("Loop")
@@ -224,14 +233,14 @@ def lower_loop(ctx: Context, s) -> None:
     extent = int(s.axis.extent.value)
     if _has_loop(s.body):
         _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent))
-    elif s.unroll:
+    elif s.unroll and extent <= FULL_UNROLL_MAX:
         _seed_accumulators(ctx, s)
         for i in range(extent):
             with ctx.scope():
                 ctx.bind(s.axis.name, X.imm(i))
                 lower_body(ctx, s.body)
     else:
-        copies = _copies(s, X.imm(1)) if extent >= 2 * PARTIAL else 1
+        copies = PARTIAL if extent >= 2 * PARTIAL else 1
         _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent), copies)
 
 
@@ -278,7 +287,7 @@ def lower_write(ctx: Context, s) -> None:
     """`buf[i] = (v0, v1, ...)`: vector store, or red.add when atomic."""
     buf = ctx.buffers[s.output]
     # A bool value stored to a float buffer is 1.0/0.0, as in emmy's C.
-    values = [X.convert(ctx, ctx.lookup(v), buf.dtype) for v in s.values]
+    values = [X.convert(ctx, ctx.lookup(v), DTYPE_KIND[buf.dtype]) for v in s.values]
     store_values(ctx, buf, flat_index(ctx, buf, s.index), values, s.atomic, s.values)
 
 
@@ -307,6 +316,8 @@ def lower_assign(ctx: Context, s) -> None:
     args, consts = _operands(ctx, s.args, arg_kinds)
     dst = ctx.em.reg(out_kind)
     emit_op(ctx.em, s.op.name, dst, args, consts)
+    if s.op.name == "multiply":
+        ctx.products[dst] = (args[0], args[1])
     ctx.assign(s.name, X.convert(ctx, Value(dst, out_kind), kind))
 
 
@@ -316,11 +327,19 @@ def lower_accum(ctx: Context, s) -> None:
 
     Ops write their destination last, so the fold can target the accumulator
     register directly. `base` (when set) replaces acc as the left operand.
+    `acc + a*b` (a matmul or dot-product step) becomes one fma.rn, as nvcc
+    contracts it in emmy's C - unless a or b is updated in place, since the
+    fma re-reads them here, after the multiply.
     """
     acc = ctx.mutable.get(s.name)
     if acc is None:
         raise ValueError(f"Accum {s.name!r} has no seeded accumulator in scope")
     args, consts = _operands(ctx, [s.base or s.name, s.value], ["f32", "f32"])
+    product = ctx.products.get(args[1]) if s.op.name == "add" else None
+    in_place = {v.text for v in ctx.mutable.values()}
+    if product and not in_place.intersection(product):
+        ctx.em.emit(f"fma.rn.f32 \t{acc.text}, {product[0]}, {product[1]}, {args[0]}")
+        return
     emit_op(ctx.em, s.op.name, acc.text, args, consts)
 
 

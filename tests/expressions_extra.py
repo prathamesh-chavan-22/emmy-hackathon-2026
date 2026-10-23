@@ -133,6 +133,9 @@ OPEN = [
          ref=lambda a, b: [f32(f64(np.abs(a) + np.float32(0.5)) ** f64(b))], rtol=1e-5, atol=1e-6),
     dict(id="x_p_neg_pow", code="(torch.randn(4096).abs() + 0.5) ** -2",
          ref=lambda x: [f32(f64(np.abs(x) + np.float32(0.5)) ** -2)], rtol=1e-6, atol=1e-6),
+    # a*b+c must round twice like numpy: a fused fma differs in the last bit
+    dict(id="x_p_mul_add_exact", code="torch.randn(64, 128) * torch.randn(128) + torch.randn(64, 128)",
+         ref=lambda a, b, c: [a * b + c], **EXACT),
     # masks mixed with numbers: emmy's C casts bool <-> float implicitly, PTX does not
     dict(id="x_p_mask_mul", code="x = torch.randn(4096); x * (x > 0)",
          ref=lambda x: [x * (x > 0)], **EXACT),

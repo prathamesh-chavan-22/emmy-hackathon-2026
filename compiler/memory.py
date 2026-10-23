@@ -77,10 +77,10 @@ def address(ctx: Context, buf: Buffer, flat: Offset) -> tuple[str, int]:
     # base + dyn * size in one multiply-add (mad.wide widens the index to 64-bit).
     if buf.space == "shared":
         addr = em.reg("s32")
-        em.emit(f"mad.lo.s32 	{addr}, {dyn.text}, {size}, {buf.addr}")
+        em.emit(f"mad.lo.s32 \t{addr}, {dyn.text}, {size}, {buf.addr}")
         return addr, const * size
     addr = em.reg("u64")
-    em.emit(f"mad.wide.s32 	{addr}, {dyn.text}, {size}, {buf.addr}")
+    em.emit(f"mad.wide.s32 \t{addr}, {dyn.text}, {size}, {buf.addr}")
     return addr, const * size
 
 
