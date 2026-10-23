@@ -10,7 +10,8 @@ from __future__ import annotations
 import operator
 
 from .context import Context, Value
-from .emitter import f32_imm
+from .dtypes import DType, INT_KINDS, bits, cast_const, common_kind, cvt
+from .emitter import f32_imm, f64_imm
 
 _FOLD = {
     "+": operator.add, "-": operator.sub, "*": operator.mul,
@@ -20,19 +21,29 @@ _FOLD = {
     "^": operator.xor,
 }
 
-_INT_OPS = {"+": "add.s32", "-": "sub.s32", "*": "mul.lo.s32",
-            "/": "div.s32", "//": "div.s32", "%": "rem.s32", "^": "xor.b32"}
+_INT_OPS = {"+": "add", "-": "sub", "*": "mul.lo", "/": "div", "//": "div", "%": "rem", "^": "xor"}
 _F32_OPS = {"+": "add.f32", "-": "sub.f32", "*": "mul.f32", "/": "div.rn.f32"}
 _CMP = {"<": "lt", "<=": "le", ">": "gt", ">=": "ge", "==": "eq", "!=": "ne"}
 _LOGIC = {"&&": "and.pred", "||": "or.pred", "^": "xor.pred"}
 
 
-def imm(value) -> Value:
-    if isinstance(value, bool):
-        return Value("1" if value else "0", "pred", True, value)
-    if isinstance(value, int):
-        return Value(str(value), "s32", True, value)
-    return Value(f32_imm(value), "f32", True, float(value))
+def imm(value, kind: str | None = None) -> Value:
+    """A constant operand; `kind` defaults to the Python type's (bool, int, float)."""
+    if kind is None:
+        kind = "pred" if isinstance(value, bool) else "s32" if isinstance(value, int) else "f32"
+    v = cast_const(value, kind)
+    if kind == "pred":
+        return Value("1" if v else "0", kind, True, v)
+    if kind in INT_KINDS:
+        return Value(str(v), kind, True, v)
+    if kind == "f64":
+        return Value(f64_imm(v), kind, True, v)
+    return Value(f32_imm(v), "f32", True, v)
+
+
+def const(value, dt: DType) -> Value:
+    """A constant of IR dtype `dt`: an f16 constant is rounded to half precision."""
+    return imm(cast_const(value, dt.kind, dt.rounds), dt.kind)
 
 
 def _fold(op: str, a, b):
@@ -48,39 +59,30 @@ def _fold(op: str, a, b):
 
 
 def to_f32(ctx: Context, v: Value) -> Value:
-    if v.kind == "f32":
-        return v
-    if v.is_imm:
-        return imm(float(v.const))
-    r = ctx.em.reg("f32")
-    ctx.em.emit(f"cvt.rn.f32.s32 \t{r}, {v.text}")
-    return Value(r, "f32")
+    return convert(ctx, v, "f32")
 
 
 def convert(ctx: Context, v: Value, kind: str) -> Value:
-    """`v` as an f32 or a predicate, with C's bool<->number rules.
+    """`v` as a value of `kind`, with C's implicit conversion rules.
 
     A number is true when nonzero (NaN included, hence the unordered compare);
-    a bool is 1.0 or 0.0. emmy's C leans on these implicit casts for masks.
+    a bool is 1 or 0; a float becomes an int by truncation. emmy's C leans on
+    these implicit casts for masks and for int variables fed float math.
     """
     if v.kind == kind:
         return v
-    if kind == "f32":
-        if v.kind == "pred":
-            if v.is_imm:
-                return imm(1.0 if v.const else 0.0)
-            r = ctx.em.reg("f32")
-            ctx.em.emit(f"selp.f32 \t{r}, 0f3F800000, 0f00000000, {v.text}", "bool -> 1.0/0.0")
-            return Value(r, "f32")
-        return to_f32(ctx, v)
-    if kind == "pred":
-        if v.is_imm:
-            return imm(bool(v.const))
-        r = ctx.em.reg("pred")
-        test = "neu.f32" if v.kind == "f32" else "ne.s32"
-        ctx.em.emit(f"setp.{test} \t{r}, {v.text}, 0{'f00000000' if v.kind == 'f32' else ''}", "nonzero -> true")
-        return Value(r, "pred")
-    raise NotImplementedError(f"conversion {v.kind} -> {kind}")
+    if v.is_imm:
+        return imm(v.const, kind)
+    em = ctx.em
+    r = em.reg(kind)
+    if v.kind == "pred":
+        em.emit(f"selp.{kind} \t{r}, {imm(1, kind).text}, {imm(0, kind).text}, {v.text}", "bool -> 1/0")
+    elif kind == "pred":
+        test = "ne" if v.kind in INT_KINDS else "neu"
+        em.emit(f"setp.{test}.{v.kind} \t{r}, {v.text}, {imm(0, v.kind).text}", "nonzero -> true")
+    else:
+        cvt(em, r, kind, v.text, v.kind)
+    return Value(r, kind)
 
 
 def to_reg(ctx: Context, v: Value) -> Value:
@@ -88,8 +90,10 @@ def to_reg(ctx: Context, v: Value) -> Value:
     if not v.is_imm:
         return v
     r = ctx.em.reg(v.kind)
-    ctx.em.emit(f"mov.{'b32' if v.kind == 's32' else v.kind} \t{r}, {v.text}"
-                if v.kind != "pred" else f"setp.ne.s32 \t{r}, {v.text}, 0")
+    if v.kind == "pred":
+        ctx.em.emit(f"setp.ne.s32 \t{r}, {v.text}, 0")
+    else:
+        ctx.em.emit(f"mov.{v.kind if v.kind in ('f32', 'f64') else f'b{bits(v.kind)}'} \t{r}, {v.text}")
     return Value(r, v.kind)
 
 
@@ -130,26 +134,27 @@ def binary(ctx: Context, op: str, a: Value, b: Value) -> Value:
         em.emit(f"{_LOGIC[op]} \t{r}, {a.text}, {b.text}")
         return Value(r, "pred")
 
-    is_float = "f32" in (a.kind, b.kind)
-    if is_float:
-        a, b = to_f32(ctx, a), to_f32(ctx, b)
+    kind = common_kind((a.kind, b.kind))
+    a, b = convert(ctx, a, kind), convert(ctx, b, kind)
     if op in _CMP:
         r = em.reg("pred")
-        em.emit(f"setp.{_CMP[op]}.{'f32' if is_float else 's32'} \t{r}, {to_reg(ctx, a).text}, {b.text}")
+        em.emit(f"setp.{_CMP[op]}.{kind} \t{r}, {to_reg(ctx, a).text}, {b.text}")
         return Value(r, "pred")
-    table = _F32_OPS if is_float else _INT_OPS
-    r = em.reg("f32" if is_float else "s32")
-    em.emit(f"{table[op]} \t{r}, {to_reg(ctx, a).text}, {b.text}")
-    return Value(r, "f32" if is_float else "s32")
+    if kind in ("f32", "f64"):
+        instr = _F32_OPS[op].replace("f32", kind)
+    else:
+        instr = f"{_INT_OPS[op]}.{f'b{bits(kind)}' if op == '^' else kind}"
+    r = em.reg(kind)
+    em.emit(f"{instr} \t{r}, {to_reg(ctx, a).text}, {b.text}")
+    return Value(r, kind)
 
 
 def select(ctx: Context, cond: Value, t: Value, f: Value) -> Value:
     if cond.is_imm:
         return t if cond.const else f
     cond = convert(ctx, cond, "pred")
-    if "f32" in (t.kind, f.kind):
-        t, f = to_f32(ctx, t), to_f32(ctx, f)
-    kind = t.kind
+    kind = common_kind((t.kind, f.kind))
+    t, f = convert(ctx, t, kind), convert(ctx, f, kind)
     r = ctx.em.reg(kind)
-    ctx.em.emit(f"selp.{'b32' if kind == 's32' else kind} \t{r}, {t.text}, {f.text}, {cond.text}")
+    ctx.em.emit(f"selp.{kind} \t{r}, {t.text}, {f.text}, {cond.text}")
     return Value(r, kind)

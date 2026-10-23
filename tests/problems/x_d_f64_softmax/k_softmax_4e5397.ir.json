@@ -1,0 +1,49 @@
+{
+  "inputs": [
+    "x"
+  ],
+  "outputs": [
+    "softmax"
+  ],
+  "nodes": {
+    "x": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "x",
+          "shape": [
+            32,
+            128
+          ],
+          "dtype": "f64"
+        }
+      ]
+    },
+    "softmax": {
+      "op": "KernelOp",
+      "op_fields": {
+        "body": [
+          "Tile(axes=(Axis(name='a0', extent=Dim(32), window=None), Axis(name='a1_co', extent=Dim(128), window=None)), body=(StridedLoop(axis=Axis(name='a1', extent=Dim(128), window=None), start=Var(name='a1_co'), step=Literal(value=128, dtype='int'), body=(Load(names=('in0',), input='x', index=(Var(name='a0'), Var(name='a1')), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8)), Accum(name='acc0', value='in0', op=ElementwiseImpl('maximum'), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8), axes=('a1',), base=None)), unroll=False, end=None, seed=True), WarpShuffle(state=('acc0',), state_b=('acc0__o',), combine_states=(Assign(name='acc0', op=ElementwiseImpl('maximum'), args=('acc0', 'acc0__o'), dtype=None),), length=32, dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Smem(name='acc0_smem', extents=(4,), dtype='float', align=0), Cond(cond=BinaryExpr(op='==', left=Var(name='lane'), right=Literal(value=0, dtype='int')), body=(Write(output='acc0_smem', index=(Var(name='warp'),), values=('acc0',), value_dtype=DataType(name='f64', np=dtype('float64'), nbytes=8), atomic=False, swizzle='NONE'),), else_body=()), Sync(barrier_id=0, count=None, warp=False), TreeHalve(bufs=('acc0_smem',), state=('acc0',), state_b=('acc0__o',), combine_states=(Assign(name='acc0', op=ElementwiseImpl('maximum'), args=('acc0', 'acc0__o'), dtype=None),), length=4, tid_var='warp', dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), barrier_id=0, barrier_count=None, inner=None), StridedLoop(axis=Axis(name='a1', extent=Dim(128), window=None), start=Var(name='a1_co'), step=Literal(value=128, dtype='int'), body=(Load(names=('in1',), input='x', index=(Var(name='a0'), Var(name='a1')), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8)), Assign(name='v0', op=ElementwiseImpl('subtract'), args=('in1', 'acc0'), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8)), Assign(name='v1', op=ElementwiseImpl('exp'), args=('v0',), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8)), Accum(name='acc1', value='v1', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a1',), base=None)), unroll=False, end=None, seed=True), WarpShuffle(state=('acc1',), state_b=('acc1__o',), combine_states=(Assign(name='acc1', op=ElementwiseImpl('add'), args=('acc1', 'acc1__o'), dtype=None),), length=32, dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Smem(name='acc1_smem', extents=(4,), dtype='float', align=0), Cond(cond=BinaryExpr(op='==', left=Var(name='lane'), right=Literal(value=0, dtype='int')), body=(Write(output='acc1_smem', index=(Var(name='warp'),), values=('acc1',), value_dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), atomic=False, swizzle='NONE'),), else_body=()), Sync(barrier_id=0, count=None, warp=False), TreeHalve(bufs=('acc1_smem',), state=('acc1',), state_b=('acc1__o',), combine_states=(Assign(name='acc1', op=ElementwiseImpl('add'), args=('acc1', 'acc1__o'), dtype=None),), length=4, tid_var='warp', dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), barrier_id=0, barrier_count=None, inner=None), Assign(name='v2', op=ElementwiseImpl('reciprocal'), args=('acc1',), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), StridedLoop(axis=Axis(name='a3', extent=Dim(128), window=None), start=Var(name='a1_co'), step=Literal(value=128, dtype='int'), body=(Load(names=('in2',), input='x', index=(Var(name='a0'), Var(name='a3')), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8)), Assign(name='v3', op=ElementwiseImpl('subtract'), args=('in2', 'acc0'), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8)), Assign(name='v4', op=ElementwiseImpl('exp'), args=('v3',), dtype=DataType(name='f64', np=dtype('float64'), nbytes=8)), Assign(name='v5', op=ElementwiseImpl('multiply'), args=('v2', 'v4'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Write(output='softmax', index=(Var(name='a0'), Var(name='a3')), values=('v5',), value_dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), atomic=False, swizzle='NONE')), unroll=False, end=None, seed=True)), block_threads=128, aux_threads=0, raster_axes=None, raster_group=None, raster_orient='m')"
+        ],
+        "name": "k_softmax_4e5397",
+        "zero_delegated": [],
+        "serial": []
+      },
+      "inputs": [
+        "x"
+      ],
+      "outputs": [
+        {
+          "name": "softmax",
+          "shape": [
+            32,
+            128
+          ],
+          "dtype": "f64"
+        }
+      ]
+    }
+  }
+}

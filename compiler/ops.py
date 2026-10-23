@@ -316,6 +316,75 @@ CONST_OPS = {
 
 
 COMPARISONS = {"greater", "greater_equal", "less", "less_equal", "equal", "not_equal"}
+_CMP = {"greater": "gt", "greater_equal": "ge", "less": "lt", "less_equal": "le",
+        "equal": "eq", "not_equal": "ne"}
+
+# Integer ops emmy renders as C operators, native when every operand is an
+# integer (any other op on ints goes through f32, as emmy's C does). / and %
+# round toward -inf, as torch's do (C truncates); >> on a signed int is
+# arithmetic (shr.s).
+INT_OPS = {"add": "add", "subtract": "sub", "multiply": "mul.lo", "floor_divide": "div",
+           "remainder": "rem", "mod": "rem", "left_shift": "shl", "right_shift": "shr",
+           "bitwise_and": "and", "bitwise_or": "or", "bitwise_xor": "xor", "bitwise_count": "popc"}
+SHIFTS = {"left_shift", "right_shift"}   # the shift amount is a 32-bit operand at any width
+
+# Correctly rounded f64 ops: computed natively they match torch's float64 bit for bit.
+F64_OPS = {
+    "add": "add.rn.f64", "subtract": "sub.rn.f64", "multiply": "mul.rn.f64", "square": "mul.rn.f64",
+    "divide": "div.rn.f64", "true_divide": "div.rn.f64", "maximum": "max.f64",
+    "minimum": "min.f64", "negative": "neg.f64", "abs": "abs.f64", "absolute": "abs.f64",
+    "sqrt": "sqrt.rn.f64", "reciprocal": "rcp.rn.f64", "copy": "mov.f64", "pad": "mov.f64",
+}
+
+
+def _floor_divmod(em: Emitter, name: str, kind: str, dst: str, a: str, b: str) -> None:
+    """torch's a // b and a % b on ints: C's truncated result, stepped toward -inf
+    when the remainder is nonzero and its sign differs from the divisor's."""
+    width = 64 if kind == "s64" else 32
+    r, x, fixed = em.reg(kind), em.reg(kind), em.reg(kind)
+    nonzero, signs, p = em.reg("pred"), em.reg("pred"), em.reg("pred")
+    em.emit(f"rem.{kind} \t{r}, {a}, {b}")
+    em.emit(f"xor.b{width} \t{x}, {r}, {b}")
+    em.emit(f"setp.ne.{kind} \t{nonzero}, {r}, 0")
+    em.emit(f"setp.lt.{kind} \t{signs}, {x}, 0")
+    em.emit(f"and.pred \t{p}, {nonzero}, {signs}", "truncation rounded the wrong way")
+    if name == "floor_divide":
+        q = em.reg(kind)
+        em.emit(f"div.{kind} \t{q}, {a}, {b}")
+        em.emit(f"sub.{kind} \t{fixed}, {q}, 1")
+        em.emit(f"selp.{kind} \t{dst}, {fixed}, {q}, {p}")
+    else:
+        em.emit(f"add.{kind} \t{fixed}, {r}, {b}")
+        em.emit(f"selp.{kind} \t{dst}, {fixed}, {r}, {p}")
+
+
+def emit_native(em: Emitter, name: str, kind: str, dst: str, args: list[str]) -> None:
+    """`dst = name(args)` computed in s32/s64/f64 itself (comparisons write a predicate)."""
+    if name in COMPARISONS:
+        cond = "neu" if kind == "f64" and name == "not_equal" else _CMP[name]
+        em.emit(f"setp.{cond}.{kind} \t{dst}, {args[0]}, {args[1]}")
+        return
+    if kind == "f64":
+        operands = [args[0], args[0]] if name == "square" else args
+        em.emit(f"{F64_OPS[name]} \t{dst}, {', '.join(operands)}")
+        return
+    width = 64 if kind == "s64" else 32
+    instr = INT_OPS[name]
+    if instr in ("div", "rem"):
+        _floor_divmod(em, name, kind, dst, *args)
+    elif instr == "popc":
+        # popc counts into a u32 at either width; widen for the i64 result.
+        count = em.reg("u32")
+        em.emit(f"popc.b{width} \t{count}, {args[0]}")
+        em.emit(f"cvt.s64.u32 \t{dst}, {count}" if width == 64 else f"mov.b32 \t{dst}, {count}")
+    else:
+        suffix = f"b{width}" if instr in ("and", "or", "xor", "shl") else kind
+        em.emit(f"{instr}.{suffix} \t{dst}, {', '.join(args)}")
+
+
+def native(name: str, kind: str) -> bool:
+    """Whether `name` has a native form for results of `kind` (see emit_native)."""
+    return name in (F64_OPS if kind == "f64" else INT_OPS if kind in ("s32", "s64") else ())
 
 
 def signature(name: str, nargs: int) -> tuple[list[str], str]:

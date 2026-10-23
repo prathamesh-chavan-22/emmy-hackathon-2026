@@ -14,7 +14,7 @@ from .loader import KernelSpec
 HEADER = ".version 8.0\n.target sm_89\n.address_size 64\n"
 
 # By-value scalar params: meta dtype -> (PTX param type, register kind).
-SCALAR_TYPES = {"f32": (".f32", "f32"), "i32": (".s32", "s32")}
+SCALAR_TYPES = {"f32": (".f32", "f32"), "i32": (".s32", "s32"), "i64": (".s64", "s64")}
 
 
 def param_symbol(name: str) -> str:

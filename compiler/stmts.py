@@ -12,10 +12,10 @@ import math
 
 from . import expr as X
 from .context import Context, Value
+from .dtypes import DType, INT_KINDS, common_kind, get, round_to
 from .memory import flat_index, load_values, store_values
-from .ops import emit_op, signature
+from .ops import COMPARISONS, SHIFTS, emit_native, emit_op, native, signature
 
-DTYPE_KIND = {"f32": "f32", "bool": "pred"}   # IR dtype -> register kind
 PARTIAL = 8    # copies per trip for innermost loops without emmy's unroll flag
 FULL_UNROLL_MAX = 64   # emmy marks extents up to 64; anything longer gets PARTIAL instead
 
@@ -51,6 +51,12 @@ def lower_block(ctx: Context, body) -> None:
 
 def dtype_name(dt) -> str:
     return "f32" if dt is None else getattr(dt, "name", str(dt))
+
+
+def value_dtype(dt) -> DType | None:
+    """The IR dtype of a statement's result; None for bool (a predicate)."""
+    name = dtype_name(dt)
+    return None if name == "bool" else get(name)
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +134,7 @@ def _seed_accumulators(ctx: Context, s) -> None:
     seeded = set()
     for acc in s.body:
         if type(acc).__name__ == "Accum" and acc.name not in seeded:
-            ctx.declare_var(acc.name, X.imm(float(acc.op.identity)))
+            ctx.declare_var(acc.name, X.const(float(acc.op.identity), value_dtype(acc.dtype)))
             seeded.add(acc.name)
 
 
@@ -274,7 +280,7 @@ def lower_load(ctx: Context, s) -> None:
     """`a, b, ... = load x[i]`: consecutive elements -> ld.v4/v2 where possible."""
     if s.input in ctx.constants and len(s.names) == 1:
         # A ConstantOp arg: its value is in the IR, so no memory access is needed.
-        ctx.assign(s.names[0], X.imm(float(ctx.constants[s.input])))
+        ctx.assign(s.names[0], X.const(ctx.constants[s.input], get(ctx.buffers[s.input].dtype)))
         return
     buf = ctx.buffers[s.input]
     values = load_values(ctx, buf, flat_index(ctx, buf, s.index), len(s.names), s.names)
@@ -286,8 +292,7 @@ def lower_load(ctx: Context, s) -> None:
 def lower_write(ctx: Context, s) -> None:
     """`buf[i] = (v0, v1, ...)`: vector store, or red.add when atomic."""
     buf = ctx.buffers[s.output]
-    # A bool value stored to a float buffer is 1.0/0.0, as in emmy's C.
-    values = [X.convert(ctx, ctx.lookup(v), DTYPE_KIND[buf.dtype]) for v in s.values]
+    values = [ctx.lookup(v) for v in s.values]
     store_values(ctx, buf, flat_index(ctx, buf, s.index), values, s.atomic, s.values)
 
 
@@ -297,44 +302,76 @@ def _operands(ctx: Context, names, kinds) -> tuple[list[str], list]:
     return [X.to_reg(ctx, v).text for v in values], [v.const if v.is_imm else None for v in values]
 
 
+def compute(ctx: Context, op: str, names, dt) -> Value:
+    """`op(names...)` with the result typed as IR dtype `dt` (see dtypes.py).
+
+    An int or f64 result uses the native op when there is one (integer
+    operands only, for an int: emmy's C does int math only then), and
+    integers and doubles compare in their own kind. Everything else computes
+    in f32: operands are converted to the kinds the op works in (ints and
+    bools become f32, numbers used as masks become predicates), and the
+    result to dt's kind - truncated for an int, rounded to half precision for
+    f16. Constants are passed along so ops like pow can specialize.
+    """
+    em = ctx.em
+    dtype = value_dtype(dt)
+    kind = dtype.kind if dtype else "pred"
+    values = [ctx.lookup(n) for n in names]
+    operand_kinds = {v.kind for v in values}
+    if op in COMPARISONS:
+        work = common_kind(operand_kinds) if "pred" not in operand_kinds else "f32"
+    elif native(op, kind) and (kind == "f64" or operand_kinds <= set(INT_KINDS)):
+        work = kind
+    else:
+        work = "f32"
+    if work != "f32":
+        kinds = [work] * len(values)
+        if op in SHIFTS:
+            kinds[1] = "s32"
+        args = [X.to_reg(ctx, X.convert(ctx, v, k)).text for v, k in zip(values, kinds)]
+        out = "pred" if op in COMPARISONS else work
+        dst = Value(em.reg(out), out)
+        emit_native(em, op, work, dst.text, args)
+        return X.convert(ctx, dst, kind)
+
+    arg_kinds, out_kind = signature(op, len(names))
+    args, consts = _operands(ctx, names, arg_kinds)
+    dst = em.reg(out_kind)
+    emit_op(em, op, dst, args, consts)
+    result = X.convert(ctx, Value(dst, out_kind), kind)
+    if dtype is not None and dtype.rounds:
+        return Value(round_to(em, result.text, dtype), kind)
+    if op == "multiply" and result.text == dst:
+        ctx.products[dst] = (args[0], args[1])
+    return result
+
+
 @handles("Assign")
 def lower_assign(ctx: Context, s) -> None:
-    """`name = op(args)`: one elementwise op from the op table.
-
-    Operands are converted to the kinds the op computes in (index ints and
-    bools become f32, numbers used as masks become predicates), and the result
-    to the IR's dtype: bool lives in a predicate register, f32 in a float one.
-    Constants are passed along so ops like pow can specialize.
-    The combine programs inside WarpShuffle/TreeHalve leave dtype unset: f32.
-    """
-    dt = dtype_name(s.dtype)
-    try:
-        kind = DTYPE_KIND[dt]
-    except KeyError:
-        raise NotImplementedError(f"Assign of dtype {dt}") from None
-    arg_kinds, out_kind = signature(s.op.name, len(s.args))
-    args, consts = _operands(ctx, s.args, arg_kinds)
-    dst = ctx.em.reg(out_kind)
-    emit_op(ctx.em, s.op.name, dst, args, consts)
-    if s.op.name == "multiply":
-        ctx.products[dst] = (args[0], args[1])
-    ctx.assign(s.name, X.convert(ctx, Value(dst, out_kind), kind))
+    """`name = op(args)`: one elementwise op, typed by the IR's dtype (see compute).
+    The combine programs inside WarpShuffle/TreeHalve leave dtype unset: f32."""
+    ctx.assign(s.name, compute(ctx, s.op.name, s.args, s.dtype))
 
 
 @handles("Accum")
 def lower_accum(ctx: Context, s) -> None:
     """`acc <- op(acc, value)` folded into the accumulator's own register.
 
-    Ops write their destination last, so the fold can target the accumulator
-    register directly. `base` (when set) replaces acc as the left operand.
-    `acc + a*b` (a matmul or dot-product step) becomes one fma.rn, as nvcc
-    contracts it in emmy's C - unless a or b is updated in place, since the
-    fma re-reads them here, after the multiply.
+    Ops write their destination last, so an f32 fold can target the
+    accumulator register directly. `base` (when set) replaces acc as the left
+    operand. `acc + a*b` (a matmul or dot-product step) becomes one fma.rn, as
+    nvcc contracts it in emmy's C - unless a or b is updated in place, since
+    the fma re-reads them here, after the multiply. Other accumulator dtypes
+    (an f16 max, an int max) compute like an Assign and convert on the way in.
     """
     acc = ctx.mutable.get(s.name)
     if acc is None:
         raise ValueError(f"Accum {s.name!r} has no seeded accumulator in scope")
-    args, consts = _operands(ctx, [s.base or s.name, s.value], ["f32", "f32"])
+    left = s.base or s.name
+    if dtype_name(s.dtype) != "f32":
+        ctx.assign(s.name, compute(ctx, s.op.name, [left, s.value], s.dtype))
+        return
+    args, consts = _operands(ctx, [left, s.value], ["f32", "f32"])
     product = ctx.products.get(args[1]) if s.op.name == "add" else None
     in_place = {v.text for v in ctx.mutable.values()}
     if product and not in_place.intersection(product):
@@ -346,7 +383,7 @@ def lower_accum(ctx: Context, s) -> None:
 @handles("Init")
 def lower_init(ctx: Context, s) -> None:
     """Carried state seeded with a literal; later folds update it in place."""
-    ctx.declare_var(s.name, X.imm(float(s.identity)))
+    ctx.declare_var(s.name, X.const(float(s.identity), value_dtype(s.dtype)))
 
 
 @handles("Select")

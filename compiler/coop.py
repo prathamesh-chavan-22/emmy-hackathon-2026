@@ -10,10 +10,10 @@ import math
 
 from . import expr as X
 from .context import Buffer, Context, Value
+from .dtypes import C_TYPES, get
 from .memory import address, at, flat_index, load_values, operand, store_values
 from .stmts import handles, lower_body
 
-SMEM_DTYPES = {"float": "f32"}   # Smem carries the C type name
 DYN_POOL = "dyn_smem"            # the extern pool behind dynamic shared memory
 
 
@@ -37,9 +37,10 @@ def lower_smem(ctx: Context, s) -> None:
     one extern pool at an aligned offset instead of being its own .shared symbol.
     """
     try:
-        dt = SMEM_DTYPES[s.dtype]
+        dt = C_TYPES[s.dtype]      # Smem carries the C type name
     except KeyError:
         raise NotImplementedError(f"Smem dtype {s.dtype}") from None
+    size = get(dt).size
     extents = tuple(int(e) for e in s.extents)
     prev = ctx.buffers.get(s.name)
     if prev is not None:
@@ -48,13 +49,13 @@ def lower_smem(ctx: Context, s) -> None:
         if prev.space == "shared" and prev.dtype == dt and prev.shape == extents:
             return
         raise ValueError(f"Smem {s.name!r} clashes with an existing buffer of that name")
-    nbytes = math.prod(extents) * 4
+    nbytes = math.prod(extents) * size
     em = ctx.em
     base = em.reg("s32")
     if ctx.smem_pool:
         # Same packing as emmy's pack_smem (align to max(dtype size, align)), so
         # the layout fits exactly in the smem_bytes it computed for the launch.
-        align = max(4, int(s.align))
+        align = max(size, int(s.align))
         offset = -(-ctx.smem_used // align) * align
         ctx.smem_used = offset + nbytes
         ctx.smem_align = max(ctx.smem_align, align)   # the pool base must honour it too
@@ -124,7 +125,8 @@ def lower_warp_shuffle(ctx: Context, s) -> None:
     Each step pulls the partner lane's state into state_b and folds it in with
     the carrier's combine program. The member mask is activemask (not 0xffffffff)
     because a small block can be a partial warp. Each step is its own block
-    (as in emmy's C): only the folded state leaves it.
+    (as in emmy's C): only the folded state leaves it. The partner value is a
+    float there whatever the state's type, so the state is shuffled as f32.
     """
     em = ctx.em
     mask = em.reg("b32")
@@ -133,7 +135,7 @@ def lower_warp_shuffle(ctx: Context, s) -> None:
     while step > 0:
         with ctx.scope():
             for st, sb in zip(s.state, s.state_b):
-                src = X.to_reg(ctx, ctx.lookup(st))
+                src = X.to_reg(ctx, X.convert(ctx, ctx.lookup(st), "f32"))
                 dst = em.reg("f32")
                 em.emit(f"shfl.sync.bfly.b32 \t{dst}, {src.text}, {step}, 31, {mask}", f"{sb} = lane ^ {step}")
                 ctx.bind(sb, Value(dst, "f32"))

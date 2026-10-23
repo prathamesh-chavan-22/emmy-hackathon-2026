@@ -35,6 +35,11 @@ from pathlib import Path
 import numpy as np
 
 
+# Element types the runner supports (docs/API.md), as numpy types for the inputs.
+DT = {"f32": np.float32, "f16": np.float16, "f64": np.float64,
+      "i32": np.int32, "i64": np.int64}
+
+
 def load_specs(path: Path):
     spec = importlib.util.spec_from_file_location("exprs", path)
     mod = importlib.util.module_from_spec(spec)
@@ -119,6 +124,13 @@ def package(spec: dict, dump: Path, outdir: Path, hidden: bool = False) -> dict:
         return t["dtype"], (t["shape"] or [1])
 
     graph_outputs = set(graph["outputs"])
+    # The runner can only allocate these element types (docs/API.md); a problem
+    # with any other (bf16, int8, fp8, ...) could never be launched.
+    for k in kernels:
+        for name in k["arg_order"]:
+            if tinfo(name)[0] not in DT:
+                raise ValueError(f"arg {name!r} is {tinfo(name)[0]}: the runner supports only "
+                                 f"{', '.join(DT)}")
     for k in kernels:
         outs = {t["name"] for t in cuda_graph["nodes"][k["node"]]["outputs"]}
         args = []
@@ -140,8 +152,6 @@ def package(spec: dict, dump: Path, outdir: Path, hidden: bool = False) -> dict:
         k["final"] = bool(outs & graph_outputs)
 
     # ---- expected outputs from the seeded inputs -------------------------
-    DT = {"f32": np.float32, "f16": np.float16, "f64": np.float64,
-          "i32": np.int32, "i64": np.int64}
     seeded = {}
     for name in graph["inputs"]:
         t = nodes[name]["outputs"][0]

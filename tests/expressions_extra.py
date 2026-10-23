@@ -27,6 +27,18 @@ MM = dict(rtol=1e-3, atol=1e-3)
 
 f64 = lambda a: a.astype(np.float64)
 f32 = lambda a: np.asarray(a).astype(np.float32)
+f16 = lambda a: np.asarray(a).astype(np.float16)
+
+# Other dtypes. Runner inputs are standard normal cast to the dtype, so ints are
+# small and signed (truncated toward zero), which exercises // and % on negatives.
+H = "dtype=torch.float16"
+D = "dtype=torch.float64"
+I32 = "torch.randint(-3, 3, (1024,), dtype=torch.int32)"
+I64 = "torch.randint(-3, 3, (1024,), dtype=torch.int64)"
+HALF_ULP = dict(rtol=1e-3, atol=1e-3)     # one f16 ulp is 2^-10 relative
+# submit.py reads results back as float32, so an exact f64 result is off by that
+# rounding alone (2^-24 relative); f32 math (emmy's for f64) would round twice.
+F64_EXACT = dict(rtol=1e-7, atol=0)
 
 
 def _softmax(x, axis=-1):
@@ -253,4 +265,72 @@ OPEN = [
          ref=lambda x: [f32(np.cumsum(f64(x)))], rtol=1e-4, atol=1e-4),
     dict(id="x_r_cumsum_rows", code="torch.cumsum(torch.randn(16, 100), -1)",
          ref=lambda x: [f32(np.cumsum(f64(x), -1))], rtol=1e-4, atol=1e-4),
+
+    # ---- other dtypes: f16 (f32 math rounded per op), f64, i32, i64 ------
+    dict(id="x_d_f16_add", code=f"torch.randn(1000, {H}) + torch.randn(1000, {H})",
+         ref=lambda a, b: [a + b], **EXACT),
+    dict(id="x_d_f16_bcast_mul", code=f"torch.randn(64, 128, {H}) * torch.randn(128, {H})",
+         ref=lambda a, b: [a * b], **EXACT),
+    dict(id="x_d_f16_div_sqrt", code=f"x = torch.randn(2048, {H}); x / torch.sqrt(x.abs() + 1)",
+         ref=lambda x: [x / np.sqrt(np.abs(x) + f16(1))], **EXACT),
+    dict(id="x_d_f16_exp", code=f"torch.exp(torch.randn(1024, {H}))",
+         ref=lambda x: [f16(np.exp(f64(x)))], **HALF_ULP),
+    dict(id="x_d_f16_gelu", code=f"torch.nn.functional.gelu(torch.randn(4096, {H}))",
+         ref=lambda x: [f16(0.5 * f64(x) * (1 + erf(f64(x) / np.sqrt(2))))], rtol=4e-3, atol=4e-3),
+    dict(id="x_d_f16_softmax", code=f"torch.softmax(torch.randn(64, 256, {H}), dim=-1)",
+         ref=lambda x: [f16(_softmax(f64(x)))], rtol=1e-2, atol=1e-4),
+    dict(id="x_d_f16_sum", code=f"torch.randn(4096, {H}).sum()",
+         ref=lambda x: [f16(f64(x).sum())], rtol=2e-3, atol=0.07),
+    dict(id="x_d_f16_mean", code=f"torch.randn(64, 512, {H}).mean(dim=-1)",
+         ref=lambda x: [f16(f64(x).mean(-1))], rtol=1e-2, atol=2e-3),
+    dict(id="x_d_f32_to_f16", code="torch.randn(1024).half() * 2",
+         ref=lambda x: [f16(x) * f16(2)], **EXACT),
+    dict(id="x_d_f16_to_f32", code=f"torch.randn(1024, {H}).float() * 3.0",
+         ref=lambda x: [f32(x) * np.float32(3)], **EXACT),
+    dict(id="x_d_f64_add", code=f"torch.randn(1000, {D}) + torch.randn(1000, {D})",
+         ref=lambda a, b: [a + b], **F64_EXACT),
+    dict(id="x_d_f64_div", code=f"a = torch.randn(2048, {D}); b = torch.randn(2048, {D}); a * b / (b.abs() + 1)",
+         ref=lambda a, b: [a * b / (np.abs(b) + 1)], **F64_EXACT),
+    dict(id="x_d_f64_exp", code=f"torch.exp(torch.randn(1024, {D}))",
+         ref=lambda x: [np.exp(x)], **TRANS),
+    dict(id="x_d_f64_sum", code=f"torch.randn(4096, {D}).sum()",
+         ref=lambda x: [x.sum()], **RED),
+    dict(id="x_d_f64_softmax", code=f"torch.softmax(torch.randn(32, 128, {D}), dim=-1)",
+         ref=lambda x: [_softmax(x)], rtol=1e-5, atol=1e-6),
+    dict(id="x_d_f64_mm", code=f"torch.randn(64, 64, {D}) @ torch.randn(64, 64, {D})",
+         ref=lambda a, b: [a @ b], **MM),
+    dict(id="x_d_i32_add", code=f"{I32} + {I32}",
+         ref=lambda a, b: [a + b], **EXACT),
+    dict(id="x_d_i64_mul_add", code=f"(lambda a, b: a * b + b)({I64}, {I64})",
+         ref=lambda a, b: [a * b + b], **EXACT),
+    dict(id="x_d_i32_floordiv", code=f"(lambda a, b: a // (b.abs() + 1))({I32}, {I32})",
+         ref=lambda a, b: [a // (np.abs(b) + 1)], **EXACT),
+    dict(id="x_d_i32_rem", code=f"(lambda a, b: a % (b.abs() + 1))({I32}, {I32})",
+         ref=lambda a, b: [a % (np.abs(b) + 1)], **EXACT),
+    dict(id="x_d_i32_floordiv_c", code=f"{I32} // 2",
+         ref=lambda a: [a // 2], **EXACT),
+    dict(id="x_d_i32_bitwise", code=f"(lambda a, b: torch.bitwise_xor(torch.bitwise_and(a, b), torch.bitwise_or(a, b)))({I32}, {I32})",
+         ref=lambda a, b: [(a & b) ^ (a | b)], **EXACT),
+    dict(id="x_d_i32_rshift", code=f"torch.bitwise_right_shift({I32}, 1)",
+         ref=lambda a: [a >> 1], **EXACT),
+    dict(id="x_d_i32_cmp", code=f"(lambda a, b: (a > b).float())({I32}, {I32})",
+         ref=lambda a, b: [f32(a > b)], **EXACT),
+    dict(id="x_d_i32_where", code=f"(lambda a: torch.where(a > 0, a, -a))({I32})",
+         ref=lambda a: [np.where(a > 0, a, -a)], **EXACT),
+    dict(id="x_d_i32_abs_sub", code=f"{I32}.abs() - 1",
+         ref=lambda a: [np.abs(a) - 1], **EXACT),
+    dict(id="x_d_i32_mixed", code=f"{I32} * 0.5 + torch.randn(1024)",
+         ref=lambda a, b: [f32(a) * np.float32(0.5) + b], **EXACT),
+    dict(id="x_d_f32_to_i32", code="(torch.randn(1024) * 10).to(torch.int32)",
+         ref=lambda x: [(x * np.float32(10)).astype(np.int32)], **EXACT),
+    dict(id="x_d_i32_to_f32", code=f"{I32}.float() / 3",
+         ref=lambda a: [f32(a) / np.float32(3)], **TRANS),
+    dict(id="x_d_i32_max", code="torch.randint(-50, 50, (64, 256), dtype=torch.int32).amax(dim=-1)",
+         ref=lambda x: [x.max(-1)], **EXACT),
+    dict(id="x_d_i64_max", code="torch.randint(-50, 50, (64, 256), dtype=torch.int64).amax(dim=-1)",
+         ref=lambda x: [x.max(-1)], **EXACT),
+    dict(id="x_d_i32_sum", code="torch.randint(-3, 3, (4096,), dtype=torch.int32).sum()",
+         ref=lambda x: [x.astype(np.int64).sum()], **EXACT),
+    dict(id="x_d_i64_cumsum", code="torch.randint(0, 5, (16, 64), dtype=torch.int64).cumsum(dim=-1)",
+         ref=lambda x: [np.cumsum(x, -1)], **EXACT),
 ]

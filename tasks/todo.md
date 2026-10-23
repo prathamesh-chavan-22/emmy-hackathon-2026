@@ -1,6 +1,15 @@
 # Status briefing (2026-10-22, deadline Oct 27 23:59 AoE)
 
-## Score: 15/15 open problems pass. 86/86 extra tests pass. 43/43 shape sweep pass.
+## Score: 15/15 open problems pass. 119/119 extra tests pass (33 non-f32 dtype). 43/43 shape sweep pass.
+
+## NOW: f16 tensor cores (stage 5 of dtype support)
+
+- [x] dtypes 1-4: generator rejects bf16/int8/fp8 (runner cannot run them); f16, f64, i32, i64
+- [ ] matmul: RegFragment, LdmatrixLoad (staged x4/x2.trans/pairs, gmem-direct, guards),
+      MmaSyncPtx m16n8k16, RegStore (+epilogue, guards), cp.async swizzle B32/B64/B128
+- [ ] attention: FragmentApply, FragmentRowReduce, FragmentRepack
+- [ ] tests: f16 matmul/bmm/linear/mlp/attention specs, GPU regression
+
 
 | cat | problems | status |
 |---|---|---|

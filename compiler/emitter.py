@@ -11,14 +11,18 @@ from __future__ import annotations
 import struct
 
 # Register class per PTX type: (name prefix, declaration type). 32-bit integers
-# all live in %r (.b32) and 64-bit addresses in %rd (.b64); the instruction's own
-# type suffix (.s32, .u64, ...) decides how the bits are interpreted.
+# all live in %r (.b32), 64-bit ones and addresses in %rd (.b64), halves in %h
+# (.b16); the instruction's own type suffix (.s32, .u64, .f16, ...) decides how
+# the bits are interpreted.
 REG_CLASSES = {
     "pred": ("%p", ".pred"),
     "f32": ("%f", ".f32"),
+    "f64": ("%fd", ".f64"),
+    "f16": ("%h", ".b16"),
     "s32": ("%r", ".b32"),
     "u32": ("%r", ".b32"),
     "b32": ("%r", ".b32"),
+    "s64": ("%rd", ".b64"),
     "u64": ("%rd", ".b64"),
     "b64": ("%rd", ".b64"),
 }
@@ -27,6 +31,11 @@ REG_CLASSES = {
 def f32_imm(value: float) -> str:
     """PTX hex float literal (0fXXXXXXXX): exact, unlike a decimal spelling."""
     return "0f%08X" % struct.unpack("<I", struct.pack("<f", float(value)))[0]
+
+
+def f64_imm(value: float) -> str:
+    """PTX hex double literal (0dXXXXXXXXXXXXXXXX)."""
+    return "0d%016X" % struct.unpack("<Q", struct.pack("<d", float(value)))[0]
 
 
 class Emitter:

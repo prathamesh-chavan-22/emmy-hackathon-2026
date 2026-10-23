@@ -1,0 +1,74 @@
+{
+ "id": "x_d_f64_div",
+ "code": "a = torch.randn(2048, dtype=torch.float64); b = torch.randn(2048, dtype=torch.float64); a * b / (b.abs() + 1)",
+ "rtol": 1e-07,
+ "atol": 0,
+ "graph_inputs": [
+  "a",
+  "b"
+ ],
+ "graph_outputs": [
+  "div"
+ ],
+ "kernels": [
+  {
+   "node": "div",
+   "entry": "k_div_pointwise",
+   "arg_order": [
+    "add_c1",
+    "b",
+    "a",
+    "div"
+   ],
+   "grid": [
+    2,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "add_c1",
+     "dtype": "f64",
+     "shape": [
+      1
+     ],
+     "data": [
+      1.0
+     ]
+    },
+    {
+     "name": "b",
+     "dtype": "f64",
+     "shape": [
+      2048
+     ],
+     "seed": 1
+    },
+    {
+     "name": "a",
+     "dtype": "f64",
+     "shape": [
+      2048
+     ],
+     "seed": 0
+    },
+    {
+     "name": "div",
+     "dtype": "f64",
+     "shape": [
+      2048
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

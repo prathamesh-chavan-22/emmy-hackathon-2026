@@ -1,0 +1,28 @@
+    Tile[a0, a1_co] (N=4096)
+        for a1 in a1_co..128:128
+            in0 = load x[a0, a1]
+            f64 acc0 <- maximum(acc0, in0)
+        WarpShuffle(acc0, length=32)
+        Smem float acc0_smem[4]
+        if ((lane == 0)):
+            acc0_smem[warp] = acc0
+        Sync
+        TreeHalve(acc0, length=4, tid=warp)
+        for a1 in a1_co..128:128
+            in1 = load x[a0, a1]
+            f64 v0 = subtract(in1, acc0)
+            f64 v1 = exp(v0)
+            f32 acc1 <- add(acc1, v1)
+        WarpShuffle(acc1, length=32)
+        Smem float acc1_smem[4]
+        if ((lane == 0)):
+            acc1_smem[warp] = acc1
+        Sync
+        TreeHalve(acc1, length=4, tid=warp)
+        f32 v2 = reciprocal(acc1)
+        for a3 in a1_co..128:128
+            in2 = load x[a0, a3]
+            f64 v3 = subtract(in2, acc0)
+            f64 v4 = exp(v3)
+            f32 v5 = multiply(v2, v4)
+            softmax[a0, a3] = v5

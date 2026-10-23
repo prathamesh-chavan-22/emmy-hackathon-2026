@@ -1,0 +1,63 @@
+{
+ "id": "x_d_i32_cmp",
+ "code": "(lambda a, b: (a > b).float())(torch.randint(-3, 3, (1024,), dtype=torch.int32), torch.randint(-3, 3, (1024,), dtype=torch.int32))",
+ "rtol": 0,
+ "atol": 0,
+ "graph_inputs": [
+  "x0",
+  "x1"
+ ],
+ "graph_outputs": [
+  "to"
+ ],
+ "kernels": [
+  {
+   "node": "to",
+   "entry": "k_to_pointwise",
+   "arg_order": [
+    "x1",
+    "x0",
+    "to"
+   ],
+   "grid": [
+    2,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "x1",
+     "dtype": "i32",
+     "shape": [
+      1024
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x0",
+     "dtype": "i32",
+     "shape": [
+      1024
+     ],
+     "seed": 0
+    },
+    {
+     "name": "to",
+     "dtype": "f32",
+     "shape": [
+      1024
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

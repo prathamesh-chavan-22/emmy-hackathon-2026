@@ -168,3 +168,30 @@ Same schedules emmy chose; better instructions inside them. Measured on the runn
   register kind; literal TABs in emitted strings back to `\t`.
 - Not changed: comparisons on index ints go through f32 (emmy's C promotes them the same way);
   `any`/`all` folds (emmy cannot trace them).
+
+## 2026-10-23 - other dtypes: f16, f64, i32, i64 (15/15 open, 119/119 extra, 43/43 sweep)
+
+- **What the hidden set can hold**: the runner allocates only f32, f16, f64, i32 and i64
+  (docs/API.md), so bf16 / int8 / fp8 / fp4 problems cannot exist. tools/generate.py now
+  rejects them with that reason instead of a KeyError.
+- **One table, compiler/dtypes.py**: per dtype its size, its memory type, the register kind it
+  computes in and its atomic type. Loads and stores convert between memory and compute kind, so
+  the statement lowerers did not need per-dtype code.
+- **How emmy's C types things** (read from its renderer, then checked on its reference kernels):
+  every variable keeps its declared type, but nearly all math is float. We mirror that, except
+  where emmy and torch disagree. The expected outputs come from torch, so there we side with torch:
+  - f16 values sit in f32 registers and each f16-typed result is rounded to half on assignment.
+    For + - * / sqrt that is bit-identical to native half math (f32 has more than twice the bits).
+  - f64: emmy narrows to float for all math. We compute + - * / sqrt min max natively in f64,
+    so those match torch exactly; transcendentals go through f32 as in emmy.
+  - i32/i64: native integer add/sub/mul/shift/bitwise ops, and other ops through f32 with C's
+    truncation back to int. emmy writes `a // b` and `a % b` as C `/` and `%`, which truncate,
+    while torch floors. With signed inputs they disagree on about half the elements, so we floor.
+  - An int accumulator seeded with emmy's `-1e30f` max identity saturates to INT_MIN, as the
+    GPU's cvt does; shuffles and smem trees carry it as float, as emmy's C does.
+- **33 new tests** (x_d_*): f16 pointwise/softmax/sum/mean/conversions, f64 pointwise/softmax/sum/matmul,
+  i32/i64 arithmetic, floor div/mod on negatives, bitwise, compares, max/sum/cumsum. All pass.
+- Found while testing: submit.py reads every output back as float32, so an f64 result is
+  checked to f32 precision at best.
+- Not done yet: f16 matmul and attention, which emmy lowers to tensor cores (mma.sync, ldmatrix,
+  swizzled shared memory).

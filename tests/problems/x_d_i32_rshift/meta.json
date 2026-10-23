@@ -1,0 +1,64 @@
+{
+ "id": "x_d_i32_rshift",
+ "code": "torch.bitwise_right_shift(torch.randint(-3, 3, (1024,), dtype=torch.int32), 1)",
+ "rtol": 0,
+ "atol": 0,
+ "graph_inputs": [
+  "x"
+ ],
+ "graph_outputs": [
+  "bitwise_right_shift"
+ ],
+ "kernels": [
+  {
+   "node": "bitwise_right_shift",
+   "entry": "k_bitwise_right_shift_pointwise",
+   "arg_order": [
+    "bitwise_right_shift_c1",
+    "x",
+    "bitwise_right_shift"
+   ],
+   "grid": [
+    2,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "bitwise_right_shift_c1",
+     "dtype": "i32",
+     "shape": [
+      1
+     ],
+     "data": [
+      1.0
+     ]
+    },
+    {
+     "name": "x",
+     "dtype": "i32",
+     "shape": [
+      1024
+     ],
+     "seed": 0
+    },
+    {
+     "name": "bitwise_right_shift",
+     "dtype": "i32",
+     "shape": [
+      1024
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

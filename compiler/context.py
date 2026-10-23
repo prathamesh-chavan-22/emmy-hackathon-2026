@@ -7,14 +7,14 @@ from dataclasses import dataclass, field
 
 from .emitter import Emitter
 
-MOV = {"f32": "mov.f32", "s32": "mov.b32", "pred": "mov.pred"}
+MOV = {"f32": "mov.f32", "f64": "mov.f64", "s32": "mov.b32", "s64": "mov.b64", "pred": "mov.pred"}
 
 
 @dataclass(frozen=True)
 class Value:
     """An operand: a register name or an immediate, plus its PTX type."""
     text: str
-    kind: str  # "s32" | "f32" | "pred"
+    kind: str  # "f32" | "f64" | "s32" | "s64" | "pred" (see dtypes.py)
     is_imm: bool = False
     const: object = None  # the Python value when is_imm, for constant folding
 
@@ -70,6 +70,11 @@ class Context:
             raise KeyError(f"IR name {name!r} used before it is defined") from None
 
     def move(self, dst: Value, src: Value) -> None:
+        """dst = src, converted to dst's kind (C's assignment conversion: an int
+        variable assigned a float truncates it)."""
+        if src.kind != dst.kind:
+            from .expr import convert   # expr builds on this module, so import late
+            src = convert(self, src, dst.kind)
         if dst.kind == "pred" and src.is_imm:
             self.em.emit(f"setp.ne.s32 \t{dst.text}, {int(bool(src.const))}, 0")
         else:
