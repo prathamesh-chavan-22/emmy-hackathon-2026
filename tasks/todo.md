@@ -1,6 +1,6 @@
 # Status briefing (2026-10-22, deadline Oct 27 23:59 AoE)
 
-## Score: 15/15 open problems pass. 73/73 extra tests pass.
+## Score: 15/15 open problems pass. 85/85 extra tests pass.
 
 | cat | problems | status |
 |---|---|---|
@@ -148,3 +148,11 @@ Third review + diverse tests (2026-10-22):
   per-level address recompute in TreeHalve (ptxas CSEs it).
 - New Select node. 23 new tests; all pass.
 - Note: check_local's 1 s compile-time gate fails when the machine is busy with other jobs.
+
+Op/statement audit (2026-10-23):
+- Hidden-set boundary = what emmy can render: all of op_to_expr covered (+ `pad`).
+- Tensor-core stmts unreachable for f32 (atoms_for(F32) == () on sm_89 and sm_120).
+- ZeroPrologue unreachable (cuda stage, after the kernel dump; not in from_dict's eval scope).
+- Fixed: bool<->f32 mixing (ops.signature + expr.convert). PTX of all old tests unchanged.
+- Test gotcha: every generated input is standard normal - `torch.rand()` in a spec is NOT
+  what the runner feeds, and constants are not passed to `ref`.

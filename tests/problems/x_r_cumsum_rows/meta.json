@@ -1,0 +1,55 @@
+{
+ "id": "x_r_cumsum_rows",
+ "code": "torch.cumsum(torch.randn(16, 100), -1)",
+ "rtol": 0.0001,
+ "atol": 0.0001,
+ "graph_inputs": [
+  "x"
+ ],
+ "graph_outputs": [
+  "cumsum"
+ ],
+ "kernels": [
+  {
+   "node": "cumsum",
+   "entry": "k_cumsum_reduce",
+   "arg_order": [
+    "x",
+    "cumsum"
+   ],
+   "grid": [
+    1,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "x",
+     "dtype": "f32",
+     "shape": [
+      16,
+      100
+     ],
+     "seed": 0
+    },
+    {
+     "name": "cumsum",
+     "dtype": "f32",
+     "shape": [
+      16,
+      100
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

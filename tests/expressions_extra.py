@@ -124,6 +124,24 @@ OPEN = [
          ref=lambda x: [f32(np.where(f64(x) > 0, f64(x), np.exp(f64(x)) - 1.0))], **TRANS),
     dict(id="x_p_sin_cos", code="x = torch.randn(4096); torch.sin(x) + torch.cos(x)",
          ref=lambda x: [f32(np.sin(f64(x)) + np.cos(f64(x)))], **TRANS),
+    dict(id="x_p_softsign", code="torch.nn.functional.softsign(torch.randn(4096))",
+         ref=lambda x: [f32(f64(x) / (1 + np.abs(f64(x))))], **TRANS),
+    dict(id="x_p_tanhshrink", code="torch.nn.functional.tanhshrink(torch.randn(4096))",
+         ref=lambda x: [f32(f64(x) - np.tanh(f64(x)))], rtol=1e-5, atol=1e-6),
+    # inputs are always standard normal (constants are not inputs): abs()+0.5 keeps the base positive
+    dict(id="x_p_pow_tensor", code="torch.pow(torch.randn(4096).abs() + 0.5, torch.randn(4096))",
+         ref=lambda a, b: [f32(f64(np.abs(a) + np.float32(0.5)) ** f64(b))], rtol=1e-5, atol=1e-6),
+    dict(id="x_p_neg_pow", code="(torch.randn(4096).abs() + 0.5) ** -2",
+         ref=lambda x: [f32(f64(np.abs(x) + np.float32(0.5)) ** -2)], rtol=1e-6, atol=1e-6),
+    # masks mixed with numbers: emmy's C casts bool <-> float implicitly, PTX does not
+    dict(id="x_p_mask_mul", code="x = torch.randn(4096); x * (x > 0)",
+         ref=lambda x: [x * (x > 0)], **EXACT),
+    dict(id="x_p_mask_float", code="x = torch.randn(4096); (x > 0.5).float() + x",
+         ref=lambda x: [(x > 0.5).astype(np.float32) + x], **EXACT),
+    dict(id="x_p_mask_and", code="x = torch.randn(4096); torch.where((x > -1.0) & (x < 1.0), x, 0.0)",
+         ref=lambda x: [np.where((x > -1) & (x < 1), x, np.float32(0))], **EXACT),
+    dict(id="x_p_mask_not", code="x = torch.randn(4096); torch.where(~(x > 0), x * 2.0, x)",
+         ref=lambda x: [np.where(~(x > 0), x * np.float32(2), x)], **EXACT),
 
     # ---- category 2: reductions (pinned like the open set) ----------------
     dict(id="x_r_sum100", code="torch.randn(100).sum()",
@@ -196,6 +214,8 @@ OPEN = [
          rtol=1e-3, atol=1e-4),
     dict(id="x_f_softmax_odd", code="torch.softmax(torch.randn(7, 33), dim=-1)",
          ref=lambda x: [f32(_softmax(f64(x)))], rtol=1e-3, atol=1e-5),
+    dict(id="x_f_softmax_dim0", code="torch.softmax(torch.randn(64, 32), dim=0)",
+         ref=lambda x: [f32(_softmax(f64(x), axis=0))], rtol=1e-3, atol=1e-5),
     dict(id="x_f_max_sub", code="x = torch.randn(64, 300); x - x.amax(-1, keepdim=True)",
          ref=lambda x: [f32(f64(x) - f64(x).max(-1, keepdims=True))], rtol=1e-5, atol=1e-6),
 
@@ -223,4 +243,11 @@ OPEN = [
          ref=lambda x: [f32(np.abs(x).max())], **RED),
     dict(id="x_r_unpinned_rows", code="torch.randn(32, 4096).sum(-1)",
          ref=lambda x: [f32(f64(x).sum(-1))], rtol=1e-3, atol=1e-3),
+    dict(id="x_r_mean_mid_3d", code="torch.randn(4, 64, 8).mean(1)",
+         ref=lambda x: [f32(f64(x).mean(1))], **RED),
+    # a scan: each output is a running sum, not one value per row
+    dict(id="x_r_cumsum", code="torch.cumsum(torch.randn(256), 0)",
+         ref=lambda x: [f32(np.cumsum(f64(x)))], rtol=1e-4, atol=1e-4),
+    dict(id="x_r_cumsum_rows", code="torch.cumsum(torch.randn(16, 100), -1)",
+         ref=lambda x: [f32(np.cumsum(f64(x), -1))], rtol=1e-4, atol=1e-4),
 ]

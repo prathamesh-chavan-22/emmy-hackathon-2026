@@ -57,6 +57,32 @@ def to_f32(ctx: Context, v: Value) -> Value:
     return Value(r, "f32")
 
 
+def convert(ctx: Context, v: Value, kind: str) -> Value:
+    """`v` as an f32 or a predicate, with C's bool<->number rules.
+
+    A number is true when nonzero (NaN included, hence the unordered compare);
+    a bool is 1.0 or 0.0. emmy's C leans on these implicit casts for masks.
+    """
+    if v.kind == kind:
+        return v
+    if kind == "f32":
+        if v.kind == "pred":
+            if v.is_imm:
+                return imm(1.0 if v.const else 0.0)
+            r = ctx.em.reg("f32")
+            ctx.em.emit(f"selp.f32 \t{r}, 0f3F800000, 0f00000000, {v.text}", "bool -> 1.0/0.0")
+            return Value(r, "f32")
+        return to_f32(ctx, v)
+    if kind == "pred":
+        if v.is_imm:
+            return imm(bool(v.const))
+        r = ctx.em.reg("pred")
+        test = "neu.f32" if v.kind == "f32" else "ne.s32"
+        ctx.em.emit(f"setp.{test} \t{r}, {v.text}, 0{'f00000000' if v.kind == 'f32' else ''}", "nonzero -> true")
+        return Value(r, "pred")
+    raise NotImplementedError(f"conversion {v.kind} -> {kind}")
+
+
 def to_reg(ctx: Context, v: Value) -> Value:
     """Materialize an immediate in a register (for instructions that need one)."""
     if not v.is_imm:
@@ -120,6 +146,7 @@ def binary(ctx: Context, op: str, a: Value, b: Value) -> Value:
 def select(ctx: Context, cond: Value, t: Value, f: Value) -> Value:
     if cond.is_imm:
         return t if cond.const else f
+    cond = convert(ctx, cond, "pred")
     if "f32" in (t.kind, f.kind):
         t, f = to_f32(ctx, t), to_f32(ctx, f)
     kind = t.kind

@@ -13,7 +13,7 @@ import math
 from . import expr as X
 from .context import Context, Value
 from .memory import flat_index, load_values, store_values
-from .ops import emit_op
+from .ops import emit_op, signature
 
 DTYPE_KIND = {"f32": "f32", "bool": "pred"}   # IR dtype -> register kind
 
@@ -206,14 +206,14 @@ def lower_load(ctx: Context, s) -> None:
 def lower_write(ctx: Context, s) -> None:
     """`buf[i] = (v0, v1, ...)`: vector store, or red.add when atomic."""
     buf = ctx.buffers[s.output]
-    values = [ctx.lookup(v) for v in s.values]
+    # A bool value stored to a float buffer is 1.0/0.0, as in emmy's C.
+    values = [X.convert(ctx, ctx.lookup(v), buf.dtype) for v in s.values]
     store_values(ctx, buf, flat_index(ctx, buf, s.index), values, s.atomic, s.values)
 
 
-def _operands(ctx: Context, names) -> tuple[list[str], list]:
-    """Argument registers for an op (ints promoted to f32, bools kept as .pred) and their constants."""
-    values = [ctx.lookup(a) for a in names]
-    values = [v if v.kind == "pred" else X.to_f32(ctx, v) for v in values]
+def _operands(ctx: Context, names, kinds) -> tuple[list[str], list]:
+    """Argument registers for an op, each converted to the kind the op computes in, and their constants."""
+    values = [X.convert(ctx, ctx.lookup(a), k) for a, k in zip(names, kinds)]
     return [X.to_reg(ctx, v).text for v in values], [v.const if v.is_imm else None for v in values]
 
 
@@ -221,8 +221,10 @@ def _operands(ctx: Context, names) -> tuple[list[str], list]:
 def lower_assign(ctx: Context, s) -> None:
     """`name = op(args)`: one elementwise op from the op table.
 
-    Integer operands (index values) are converted to f32; bool values live in
-    predicate registers. Constants are passed along so ops like pow can specialize.
+    Operands are converted to the kinds the op computes in (index ints and
+    bools become f32, numbers used as masks become predicates), and the result
+    to the IR's dtype: bool lives in a predicate register, f32 in a float one.
+    Constants are passed along so ops like pow can specialize.
     The combine programs inside WarpShuffle/TreeHalve leave dtype unset: f32.
     """
     dt = dtype_name(s.dtype)
@@ -230,10 +232,11 @@ def lower_assign(ctx: Context, s) -> None:
         kind = DTYPE_KIND[dt]
     except KeyError:
         raise NotImplementedError(f"Assign of dtype {dt}") from None
-    args, consts = _operands(ctx, s.args)
-    dst = ctx.em.reg(kind)
+    arg_kinds, out_kind = signature(s.op.name, len(s.args))
+    args, consts = _operands(ctx, s.args, arg_kinds)
+    dst = ctx.em.reg(out_kind)
     emit_op(ctx.em, s.op.name, dst, args, consts)
-    ctx.assign(s.name, Value(dst, kind))
+    ctx.assign(s.name, X.convert(ctx, Value(dst, out_kind), kind))
 
 
 @handles("Accum")
@@ -246,7 +249,7 @@ def lower_accum(ctx: Context, s) -> None:
     acc = ctx.mutable.get(s.name)
     if acc is None:
         raise ValueError(f"Accum {s.name!r} has no seeded accumulator in scope")
-    args, consts = _operands(ctx, [s.base or s.name, s.value])
+    args, consts = _operands(ctx, [s.base or s.name, s.value], ["f32", "f32"])
     emit_op(ctx.em, s.op.name, acc.text, args, consts)
 
 

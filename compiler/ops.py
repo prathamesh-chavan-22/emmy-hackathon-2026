@@ -263,6 +263,7 @@ F32_OPS = {
     "rsqrt": _rsqrt,
     "reciprocal": _simple("rcp.rn.f32"),
     "copy": _simple("mov.f32"),
+    "pad": _simple("mov.f32"),               # emmy renders pad as the identity, like copy
     "square": lambda em, d, a: em.emit(f"mul.f32 \t{d}, {a[0]}, {a[0]}"),
     "relu": lambda em, d, a: em.emit(f"max.f32 \t{d}, {a[0]}, {ZERO}"),
     "floor": _simple("cvt.rmi.f32.f32"),
@@ -309,6 +310,25 @@ CONST_OPS = {
     "power": _pow,
     "pow": _pow,
 }
+
+
+COMPARISONS = {"greater", "greater_equal", "less", "less_equal", "equal", "not_equal"}
+
+
+def signature(name: str, nargs: int) -> tuple[list[str], str]:
+    """(operand kinds, result kind) an op computes in.
+
+    emmy's C promotes freely between bool and float (a mask times x, a mask
+    stored as 0.0/1.0); PTX does not, so the caller converts each operand to
+    the kind listed here and the result to the kind the IR asks for.
+    """
+    if name in PRED_OPS:
+        return ["pred"] * nargs, "pred"
+    if name in COMPARISONS:
+        return ["f32"] * nargs, "pred"
+    if name == "where":
+        return ["pred", "f32", "f32"], "f32"
+    return ["f32"] * nargs, "f32"
 
 
 def emit_op(em: Emitter, name: str, dst: str, args: list[str], consts: list) -> None:
