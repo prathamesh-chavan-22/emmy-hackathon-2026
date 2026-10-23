@@ -41,6 +41,31 @@ HALF_ULP = dict(rtol=1e-3, atol=1e-3)     # one f16 ulp is 2^-10 relative
 F64_EXACT = dict(rtol=1e-7, atol=0)
 
 
+# f16 tensor cores: f16 inputs, f32 accumulation, one rounding to f16 at the end
+# (two when torch rounds an intermediate), so a result is within about one f16 ulp.
+MMH = dict(rtol=2e-3, atol=2e-3)
+ATTH = dict(rtol=1e-2, atol=1e-2)   # the softmax weights are rounded to f16 too
+
+
+def _mmh(a, b):
+    return f16(f64(a) @ f64(b))
+
+
+def _attn_h(q, kt, v, scale, causal=False, mask=None):
+    """torch's f16 attention: each op's result rounded to f16."""
+    s = f16(f16(f64(q) @ f64(kt)) * scale)
+    if mask is not None:
+        s = f16(s + mask)
+    s = f64(s)
+    if causal:
+        s = np.where(np.tril(np.ones(s.shape[-2:], dtype=bool)), s, -np.inf)
+    return f16(f64(f16(_softmax(s))) @ f64(v))
+
+
+def _gelu(x):
+    return 0.5 * x * (1 + erf(x / np.sqrt(2)))
+
+
 def _softmax(x, axis=-1):
     e = np.exp(x - x.max(axis=axis, keepdims=True))
     return e / e.sum(axis=axis, keepdims=True)
@@ -333,4 +358,72 @@ OPEN = [
          ref=lambda x: [x.astype(np.int64).sum()], **EXACT),
     dict(id="x_d_i64_cumsum", code="torch.randint(0, 5, (16, 64), dtype=torch.int64).cumsum(dim=-1)",
          ref=lambda x: [np.cumsum(x, -1)], **EXACT),
+    # ---- f16 tensor cores (mma.sync m16n8k16): matmul shapes, epilogues, attention ----
+    dict(id="x_h_mm_16", code=f"torch.randn(16, 16, {H}) @ torch.randn(16, 16, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_64", code=f"torch.randn(64, 64, {H}) @ torch.randn(64, 64, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_128", code=f"torch.randn(128, 128, {H}) @ torch.randn(128, 128, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_256", code=f"torch.randn(256, 256, {H}) @ torch.randn(256, 256, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_1024", code=f"torch.randn(1024, 1024, {H}) @ torch.randn(1024, 1024, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_rect", code=f"torch.randn(64, 256, {H}) @ torch.randn(256, 96, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_odd", code=f"torch.randn(100, 72, {H}) @ torch.randn(72, 50, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_vec", code=f"torch.randn(1, 256, {H}) @ torch.randn(256, 256, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_bmm", code=f"torch.randn(4, 64, 64, {H}) @ torch.randn(4, 64, 64, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_mm_t", code=f"torch.randn(128, 64, {H}) @ torch.randn(128, 64, {H}).t()",
+         ref=lambda a, b: [_mmh(a, b.T)], **MMH),
+    dict(id="x_h_linear", code=f"torch.nn.functional.linear(torch.randn(64, 128, {H}), torch.randn(256, 128, {H}))",
+         ref=lambda x, w: [_mmh(x, w.T)], **MMH),
+    dict(id="x_h_mm_relu", code=f"torch.relu(torch.randn(128, 128, {H}) @ torch.randn(128, 128, {H}))",
+         ref=lambda a, b: [np.maximum(_mmh(a, b), f16(0))], **MMH),
+    dict(id="x_h_mm_bias", code=f"torch.randn(128, 128, {H}) @ torch.randn(128, 128, {H}) + torch.randn(128, {H})",
+         ref=lambda a, b, c: [_mmh(a, b) + c], **MMH),
+    dict(id="x_h_mlp", code=f"x = torch.randn(64, 128, {H}); w1 = torch.randn(128, 256, {H}); "
+                            f"w2 = torch.randn(256, 128, {H}); torch.relu(x @ w1) @ w2",
+         # an f16 intermediate on a rounding boundary may round the other way under another
+         # f32 summation order: one ulp of h (~0.016) times a weight
+         ref=lambda x, w1, w2: [_mmh(np.maximum(_mmh(x, w1), f16(0)), w2)], rtol=2e-3, atol=0.06),
+    dict(id="x_h_mm_mixed", code=f"torch.randn(64, 64, {H}).float() @ torch.randn(64, 64)",
+         ref=lambda a, b: [f32(f64(a) @ f64(b))], **MM),
+    dict(id="x_h_attn", code=f"q = torch.randn(64, 64, {H}); kt = torch.randn(64, 64, {H}); "
+                             f"v = torch.randn(64, 64, {H}); torch.softmax(q @ kt / 8.0, dim=-1) @ v",
+         ref=lambda q, kt, v: [_attn_h(q, kt, v, 1 / 8)], **ATTH),
+    dict(id="x_h_attn_128", code=f"q = torch.randn(128, 64, {H}); kt = torch.randn(64, 128, {H}); "
+                                 f"v = torch.randn(128, 64, {H}); torch.softmax(q @ kt / 8.0, dim=-1) @ v",
+         ref=lambda q, kt, v: [_attn_h(q, kt, v, 1 / 8)], **ATTH),
+    dict(id="x_h_attn_b", code=f"q = torch.randn(4, 64, 32, {H}); kt = torch.randn(4, 32, 64, {H}); "
+                               f"v = torch.randn(4, 64, 32, {H}); torch.softmax(q @ kt / 5.66, dim=-1) @ v",
+         ref=lambda q, kt, v: [_attn_h(q, kt, v, 1 / 5.66)], **ATTH),
+    dict(id="x_h_sdpa", code=f"torch.nn.functional.scaled_dot_product_attention(torch.randn(1, 4, 64, 32, {H}), "
+                             f"torch.randn(1, 4, 64, 32, {H}), torch.randn(1, 4, 64, 32, {H}))",
+         ref=lambda q, k, v: [_attn_h(q, np.swapaxes(k, -1, -2), v, 1 / np.sqrt(32))], **ATTH),
+    dict(id="x_h_sdpa_causal", code=f"torch.nn.functional.scaled_dot_product_attention(torch.randn(1, 2, 64, 32, {H}), "
+                                    f"torch.randn(1, 2, 64, 32, {H}), torch.randn(1, 2, 64, 32, {H}), is_causal=True)",
+         ref=lambda q, k, v: [_attn_h(q, np.swapaxes(k, -1, -2), v, 1 / np.sqrt(32), causal=True)], **ATTH),
+    dict(id="x_h_sdpa_mask", code=f"torch.nn.functional.scaled_dot_product_attention(torch.randn(1, 2, 64, 32, {H}), "
+                                  f"torch.randn(1, 2, 64, 32, {H}), torch.randn(1, 2, 64, 32, {H}), "
+                                  f"attn_mask=torch.randn(64, 64, {H}))",
+         ref=lambda q, k, v, m: [_attn_h(q, np.swapaxes(k, -1, -2), v, 1 / np.sqrt(32), mask=m)], **ATTH),
+    # odd sequence lengths (masked tiles, zero-filled K); the head dim stays a multiple of 16:
+    # with 40, emmy's tiling drops k = 32..39 of q @ kt (its own reference kernel too)
+    dict(id="x_h_attn_odd", code=f"q = torch.randn(50, 32, {H}); kt = torch.randn(32, 70, {H}); "
+                                 f"v = torch.randn(70, 24, {H}); torch.softmax(q @ kt / 6.0, dim=-1) @ v",
+         ref=lambda q, kt, v: [_attn_h(q, kt, v, 1 / 6)], **ATTH),
+    dict(id="x_h_mm_odd2", code=f"torch.randn(33, 40, {H}) @ torch.randn(40, 17, {H})",
+         ref=lambda a, b: [_mmh(a, b)], **MMH),
+    dict(id="x_h_bmm_t", code=f"q = torch.randn(2, 64, 32, {H}); k = torch.randn(2, 96, 32, {H}); q @ k.transpose(-1, -2)",
+         ref=lambda q, k: [_mmh(q, np.swapaxes(k, -1, -2))], **MMH),
+    dict(id="x_h_linear_bias_gelu", code=f"torch.nn.functional.gelu(torch.nn.functional.linear("
+                                         f"torch.randn(128, 64, {H}), torch.randn(96, 64, {H}), torch.randn(96, {H})))",
+         ref=lambda x, w, b: [f16(_gelu(f64(_mmh(x, w.T) + b)))], rtol=4e-3, atol=4e-3),
+    dict(id="x_h_mm_residual", code=f"a = torch.randn(128, 64, {H}); b = torch.randn(64, 128, {H}); "
+                                    f"r = torch.randn(128, 128, {H}); a @ b + r",
+         ref=lambda a, b, r: [_mmh(a, b) + r], **MMH),
 ]

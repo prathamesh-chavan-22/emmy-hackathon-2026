@@ -57,6 +57,41 @@ def flat_index(ctx: Context, buf: Buffer, index) -> Offset:
     return dyn, const
 
 
+# Smem swizzle modes: XOR mask over the 16-byte chunk index (bits 3.. of a half's
+# index), taken from the index bits starting at `shift` (6 unless "MODE@shift").
+SWIZZLE_MASKS = {"B128": 0x7, "B64": 0x3, "B32": 0x1}
+
+
+def swizzle(ctx: Context, e: Value, mode: str) -> Value:
+    """emmy's slab swizzle on element index e: e ^ (((e >> shift) & mask) << 3).
+
+    It moves each 8-half (16-byte) chunk of a row to another chunk slot, chosen
+    by the row, so the 8 rows one ldmatrix phase reads hit different banks.
+    The cp.async fill and the ldmatrix drain apply the same permutation.
+    """
+    base, _, shift = mode.partition("@")
+    if base in ("NONE", ""):
+        return e
+    if base not in SWIZZLE_MASKS:
+        raise NotImplementedError(f"smem swizzle {mode}")
+    mask, shift = SWIZZLE_MASKS[base], int(shift or 6)
+    if e.is_imm:
+        return X.imm(e.const ^ (((e.const >> shift) & mask) << 3))
+    em = ctx.em
+    field, r = em.reg("s32"), em.reg("s32")
+    em.emit(f"bfe.u32 \t{field}, {e.text}, {shift}, {mask.bit_length()}", f"swizzle {mode}")
+    em.emit(f"shl.b32 \t{field}, {field}, 3")
+    em.emit(f"xor.b32 \t{r}, {e.text}, {field}")
+    return Value(r, "s32")
+
+
+def swizzled(ctx: Context, flat: Offset, mode) -> Offset:
+    """flat through the slab swizzle `mode` (unchanged for NONE)."""
+    if mode in ("NONE", "", None):
+        return flat
+    return swizzle(ctx, X.binary(ctx, "+", flat[0], X.imm(flat[1])), mode), 0
+
+
 def address(ctx: Context, buf: Buffer, flat: Offset) -> tuple[str, int]:
     """Address of element `flat` as (base register, constant byte offset).
 

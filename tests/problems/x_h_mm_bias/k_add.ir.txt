@@ -1,0 +1,8 @@
+    Tile[a0, a1] (N=16384)
+        for _a2_ks in 0..2
+            acc0__p = load add__partial[_a2_ks, a0, a1]
+            f32 acc0 <- add(acc0, acc0__p)
+        f16 v1 = copy(acc0)
+        in2 = load x2[a1]
+        f16 v2 = add(in2, v1)
+        add[a0, a1] = v2

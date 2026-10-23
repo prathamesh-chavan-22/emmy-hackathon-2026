@@ -1,0 +1,66 @@
+{
+ "id": "x_h_mm_relu",
+ "code": "torch.relu(torch.randn(128, 128, dtype=torch.float16) @ torch.randn(128, 128, dtype=torch.float16))",
+ "rtol": 0.002,
+ "atol": 0.002,
+ "graph_inputs": [
+  "x0",
+  "x1"
+ ],
+ "graph_outputs": [
+  "relu"
+ ],
+ "kernels": [
+  {
+   "node": "relu",
+   "entry": "k_matmul_b9e8f0",
+   "arg_order": [
+    "x1",
+    "x0",
+    "relu"
+   ],
+   "grid": [
+    16,
+    1,
+    1
+   ],
+   "block": [
+    128,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "x1",
+     "dtype": "f16",
+     "shape": [
+      128,
+      128
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x0",
+     "dtype": "f16",
+     "shape": [
+      128,
+      128
+     ],
+     "seed": 0
+    },
+    {
+     "name": "relu",
+     "dtype": "f16",
+     "shape": [
+      128,
+      128
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

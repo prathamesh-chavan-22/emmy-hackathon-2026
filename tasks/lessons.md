@@ -10,3 +10,11 @@
   torch: expected outputs are torch's, so emmy's behaviour there can only lose.
 - Before refactoring a shared path (value kinds, conversions), save HEAD in a worktree and diff
   the PTX of every test IR: only intended changes should show up.
+
+- **A PASS needs a comparison line.** submit.py checks only the outputs present in expected.npz; a probe
+  generated with an empty ref "passes" with exit 0 and no PASS line. Before trusting a result, see
+  `[entry] PASS name: max abs err` for the final output.
+- **When the output disagrees with torch, check the IR before the compiler.** Recompute the reference
+  the way the IR says (e.g. truncated K) - if that matches, the bug is emmy's, and emmy's own reference
+  kernel will show it too.
+

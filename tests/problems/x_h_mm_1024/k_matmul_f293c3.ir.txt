@@ -1,0 +1,123 @@
+    Tile[a0_b, a1_b, a0_u, a1_u, _lane] (N=16384)
+        RegFragment a:f16 _a0_s0[4] (16x8x16)
+        RegFragment a:f16 _a0_s1[4] (16x8x16)
+        RegFragment a:f16 _a1_s0[4] (16x8x16)
+        RegFragment a:f16 _a1_s1[4] (16x8x16)
+        RegFragment b:f16 _b0_s0[2] (16x8x16)
+        RegFragment b:f16 _b0_s1[2] (16x8x16)
+        RegFragment b:f16 _b1_s0[2] (16x8x16)
+        RegFragment b:f16 _b1_s1[2] (16x8x16)
+        RegFragment b:f16 _b2_s0[2] (16x8x16)
+        RegFragment b:f16 _b2_s1[2] (16x8x16)
+        RegFragment b:f16 _b3_s0[2] (16x8x16)
+        RegFragment b:f16 _b3_s1[2] (16x8x16)
+        RegFragment b:f16 _b4_s0[2] (16x8x16)
+        RegFragment b:f16 _b4_s1[2] (16x8x16)
+        RegFragment b:f16 _b5_s0[2] (16x8x16)
+        RegFragment b:f16 _b5_s1[2] (16x8x16)
+        RegFragment b:f16 _b6_s0[2] (16x8x16)
+        RegFragment b:f16 _b6_s1[2] (16x8x16)
+        RegFragment b:f16 _b7_s0[2] (16x8x16)
+        RegFragment b:f16 _b7_s1[2] (16x8x16)
+        RegFragment c:f32 _c0_0[4] (16x8x16)
+        RegFragment c:f32 _c0_1[4] (16x8x16)
+        RegFragment c:f32 _c0_2[4] (16x8x16)
+        RegFragment c:f32 _c0_3[4] (16x8x16)
+        RegFragment c:f32 _c0_4[4] (16x8x16)
+        RegFragment c:f32 _c0_5[4] (16x8x16)
+        RegFragment c:f32 _c0_6[4] (16x8x16)
+        RegFragment c:f32 _c0_7[4] (16x8x16)
+        RegFragment c:f32 _c1_0[4] (16x8x16)
+        RegFragment c:f32 _c1_1[4] (16x8x16)
+        RegFragment c:f32 _c1_2[4] (16x8x16)
+        RegFragment c:f32 _c1_3[4] (16x8x16)
+        RegFragment c:f32 _c1_4[4] (16x8x16)
+        RegFragment c:f32 _c1_5[4] (16x8x16)
+        RegFragment c:f32 _c1_6[4] (16x8x16)
+        RegFragment c:f32 _c1_7[4] (16x8x16)
+        Smem __half _a_smem[64, 32] align=512
+        Smem __half _b_smem[64, 256] align=1024
+        cp.async[16B] _a_smem[0, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 32), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 32)) swz=B64 <- x0[((a0_b * 32) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 32) + 0)), (0 + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 32))]
+        cp.async[16B] _b_smem[0, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 0)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async[16B] _b_smem[4, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 4)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async[16B] _b_smem[8, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 8)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async[16B] _b_smem[12, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 12)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async[16B] _b_smem[16, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 16)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async[16B] _b_smem[20, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 20)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async[16B] _b_smem[24, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 24)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async[16B] _b_smem[28, 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[(0 + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 28)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+        cp.async.commit_group
+        for _ks in 0..1024:32
+            cp.async[16B] _a_smem[(((((_ks / 32) + 1) % 2) * 32) + 0), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 32), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 32)) swz=B64 <- x0[((a0_b * 32) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 32) + 0)), ((((_ks + 32) < 1024) ? (_ks + 32) : 992) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 32))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 0), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 0)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 4), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 4)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 8), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 8)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 12), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 12)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 16), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 16)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 20), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 20)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 24), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 24)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + 28), 0] + lane(((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256), ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256)) swz=B128@8 <- x1[((((_ks + 32) < 1024) ? (_ks + 32) : 992) + (((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) / 256) + 28)), ((a1_b * 256) + ((((((a0_u * 4) + a1_u) * 32) + _lane) * 8) % 256))]
+            cp.async.commit_group
+            cp.async.wait_group(1)
+            Sync
+            LdmatrixLoad _a0_s0 <- _a_smem[((((_ks / 32) % 2) * 32) + ((a0_u * 32) + 0)), 0] (x4, ldm=32)
+            LdmatrixLoad _a1_s0 <- _a_smem[((((_ks / 32) % 2) * 32) + ((a0_u * 32) + 16)), 0] (x4, ldm=32)
+            LdmatrixLoad (_b0_s0, _b1_s0) <- _b_smem[((((_ks / 32) % 2) * 32) + 0), ((a1_u * 64) + 0)] (x4.trans pair, ldm=256)
+            LdmatrixLoad (_b2_s0, _b3_s0) <- _b_smem[((((_ks / 32) % 2) * 32) + 0), ((a1_u * 64) + 16)] (x4.trans pair, ldm=256)
+            LdmatrixLoad (_b4_s0, _b5_s0) <- _b_smem[((((_ks / 32) % 2) * 32) + 0), ((a1_u * 64) + 32)] (x4.trans pair, ldm=256)
+            LdmatrixLoad (_b6_s0, _b7_s0) <- _b_smem[((((_ks / 32) % 2) * 32) + 0), ((a1_u * 64) + 48)] (x4.trans pair, ldm=256)
+            LdmatrixLoad _a0_s1 <- _a_smem[((((_ks / 32) % 2) * 32) + ((a0_u * 32) + 0)), 16] (x4, ldm=32)
+            LdmatrixLoad _a1_s1 <- _a_smem[((((_ks / 32) % 2) * 32) + ((a0_u * 32) + 16)), 16] (x4, ldm=32)
+            LdmatrixLoad (_b0_s1, _b1_s1) <- _b_smem[((((_ks / 32) % 2) * 32) + 16), ((a1_u * 64) + 0)] (x4.trans pair, ldm=256)
+            LdmatrixLoad (_b2_s1, _b3_s1) <- _b_smem[((((_ks / 32) % 2) * 32) + 16), ((a1_u * 64) + 16)] (x4.trans pair, ldm=256)
+            LdmatrixLoad (_b4_s1, _b5_s1) <- _b_smem[((((_ks / 32) % 2) * 32) + 16), ((a1_u * 64) + 32)] (x4.trans pair, ldm=256)
+            LdmatrixLoad (_b6_s1, _b7_s1) <- _b_smem[((((_ks / 32) % 2) * 32) + 16), ((a1_u * 64) + 48)] (x4.trans pair, ldm=256)
+            MmaSyncPtx _c0_0 += _a0_s0 @ _b0_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_1 += _a0_s0 @ _b1_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_2 += _a0_s0 @ _b2_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_3 += _a0_s0 @ _b3_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_4 += _a0_s0 @ _b4_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_5 += _a0_s0 @ _b5_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_6 += _a0_s0 @ _b6_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_7 += _a0_s0 @ _b7_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_0 += _a1_s0 @ _b0_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_1 += _a1_s0 @ _b1_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_2 += _a1_s0 @ _b2_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_3 += _a1_s0 @ _b3_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_4 += _a1_s0 @ _b4_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_5 += _a1_s0 @ _b5_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_6 += _a1_s0 @ _b6_s0 (m16n8k16 f16)
+            MmaSyncPtx _c1_7 += _a1_s0 @ _b7_s0 (m16n8k16 f16)
+            MmaSyncPtx _c0_0 += _a0_s1 @ _b0_s1 (m16n8k16 f16)
+            MmaSyncPtx _c0_1 += _a0_s1 @ _b1_s1 (m16n8k16 f16)
+            MmaSyncPtx _c0_2 += _a0_s1 @ _b2_s1 (m16n8k16 f16)
+            MmaSyncPtx _c0_3 += _a0_s1 @ _b3_s1 (m16n8k16 f16)
+            MmaSyncPtx _c0_4 += _a0_s1 @ _b4_s1 (m16n8k16 f16)
+            MmaSyncPtx _c0_5 += _a0_s1 @ _b5_s1 (m16n8k16 f16)
+            MmaSyncPtx _c0_6 += _a0_s1 @ _b6_s1 (m16n8k16 f16)
+            MmaSyncPtx _c0_7 += _a0_s1 @ _b7_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_0 += _a1_s1 @ _b0_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_1 += _a1_s1 @ _b1_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_2 += _a1_s1 @ _b2_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_3 += _a1_s1 @ _b3_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_4 += _a1_s1 @ _b4_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_5 += _a1_s1 @ _b5_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_6 += _a1_s1 @ _b6_s1 (m16n8k16 f16)
+            MmaSyncPtx _c1_7 += _a1_s1 @ _b7_s1 (m16n8k16 f16)
+            Sync
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 0)] <- _c0_0 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 8)] <- _c0_1 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 16)] <- _c0_2 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 24)] <- _c0_3 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 32)] <- _c0_4 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 40)] <- _c0_5 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 48)] <- _c0_6 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 0), (((a1_b * 256) + (a1_u * 64)) + 56)] <- _c0_7 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 0)] <- _c1_0 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 8)] <- _c1_1 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 16)] <- _c1_2 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 24)] <- _c1_3 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 32)] <- _c1_4 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 40)] <- _c1_5 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 48)] <- _c1_6 (ldm=auto)
+        RegStore matmul[(((a0_b * 32) + (a0_u * 32)) + 16), (((a1_b * 256) + (a1_u * 64)) + 56)] <- _c1_7 (ldm=auto)

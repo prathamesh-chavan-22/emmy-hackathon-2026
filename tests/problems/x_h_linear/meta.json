@@ -1,0 +1,66 @@
+{
+ "id": "x_h_linear",
+ "code": "torch.nn.functional.linear(torch.randn(64, 128, dtype=torch.float16), torch.randn(256, 128, dtype=torch.float16))",
+ "rtol": 0.002,
+ "atol": 0.002,
+ "graph_inputs": [
+  "x0",
+  "x1"
+ ],
+ "graph_outputs": [
+  "linear"
+ ],
+ "kernels": [
+  {
+   "node": "linear",
+   "entry": "k_linear_17fb94",
+   "arg_order": [
+    "x1",
+    "x0",
+    "linear"
+   ],
+   "grid": [
+    32,
+    1,
+    1
+   ],
+   "block": [
+    64,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "x1",
+     "dtype": "f16",
+     "shape": [
+      256,
+      128
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x0",
+     "dtype": "f16",
+     "shape": [
+      64,
+      128
+     ],
+     "seed": 0
+    },
+    {
+     "name": "linear",
+     "dtype": "f16",
+     "shape": [
+      64,
+      256
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

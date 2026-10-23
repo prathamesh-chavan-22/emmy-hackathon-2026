@@ -11,7 +11,7 @@ import math
 from . import expr as X
 from .context import Buffer, Context, Value
 from .dtypes import C_TYPES, get
-from .memory import address, at, flat_index, load_values, operand, store_values
+from .memory import address, at, flat_index, load_values, operand, store_values, swizzled
 from .stmts import handles, lower_body
 
 DYN_POOL = "dyn_smem"            # the extern pool behind dynamic shared memory
@@ -77,10 +77,10 @@ def lower_cp_async_copy(ctx: Context, s) -> None:
 
     16-byte copies use .cg (bypass L1, the streaming form); smaller ones .ca.
     `lane_index`, when set, is this thread's (row, col) inside a copy stripe and
-    is added to the stripe's base element.
+    is added to the stripe's base element. A swizzled slab (one an ldmatrix
+    drains) permutes the whole destination index; emmy splits that XOR into a
+    per-lane part and a base part only where both give the same index.
     """
-    if s.swizzle not in ("NONE", "", None):
-        raise NotImplementedError(f"cp.async swizzle {s.swizzle}")
     if s.nbytes not in (4, 8, 16):
         raise NotImplementedError(f"cp.async of {s.nbytes} bytes (PTX allows 4, 8, 16)")
     dst_buf, src_buf = ctx.buffers[s.smem], ctx.buffers[s.src]
@@ -91,7 +91,7 @@ def lower_cp_async_copy(ctx: Context, s) -> None:
         row, col = (X.lower(ctx, e) for e in s.lane_index)
         lane = X.binary(ctx, "+", X.binary(ctx, "*", row, X.imm(dst_buf.shape[-1])), col)
         dst = (X.binary(ctx, "+", dst[0], lane), dst[1])
-    d_base, d_off = address(ctx, dst_buf, dst)
+    d_base, d_off = address(ctx, dst_buf, swizzled(ctx, dst, s.swizzle))
     s_base, s_off = address(ctx, src_buf, flat_index(ctx, src_buf, s.src_index))
     cache = "cg" if s.nbytes == 16 else "ca"
     ctx.em.emit(f"cp.async.{cache}.shared.global \t{operand(d_base, d_off)}, {operand(s_base, s_off)}, {s.nbytes}")

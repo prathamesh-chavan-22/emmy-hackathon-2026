@@ -8,6 +8,7 @@ from .loader import KernelSpec, load
 from .prologue import HEADER, load_params, signature
 from .stmts import lower_body
 from .coop import DYN_POOL  # importing coop also registers the cross-thread handlers
+from . import mma  # noqa: F401  (registers the tensor-core handlers)
 
 
 def compile_kernel(spec: KernelSpec) -> str:

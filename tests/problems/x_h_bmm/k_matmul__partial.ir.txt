@@ -1,0 +1,14 @@
+    Tile[_a3_ks, a0, a1_b, a2_b, a1_u, a2_u, _lane] (N=32768)
+        RegFragment a:f16 _a0[4] (16x8x16)
+        RegFragment b:f16 _b[4][2] (16x8x16)
+        RegFragment c:f32 _c0_[4][4] (16x8x16)
+        for a3 in 0..2:16
+            LdmatrixLoad _a0 <- x0[a0, (((a1_b * 32) + (a1_u * 16)) + 0), ((_a3_ks * 2) + a3)] (gmem-direct, ldm=64)
+            for _r0 in 0..4:1
+                LdmatrixLoad _b[_r0] <- x1[a0, ((_a3_ks * 2) + a3), (((a2_b * 32) + (a2_u * 32)) + (_r0 * 8))] (gmem-direct, ldm=64)
+            for _r0 in 0..4:1
+                MmaSyncPtx _c0_[_r0] += _a0 @ _b[_r0] (m16n8k16 f16)
+        RegStore matmul__partial[_a3_ks, a0, (((a1_b * 32) + (a1_u * 16)) + 0), (((a2_b * 32) + (a2_u * 32)) + 0)] <- _c0_[0] (ldm=auto)
+        RegStore matmul__partial[_a3_ks, a0, (((a1_b * 32) + (a1_u * 16)) + 0), (((a2_b * 32) + (a2_u * 32)) + 8)] <- _c0_[1] (ldm=auto)
+        RegStore matmul__partial[_a3_ks, a0, (((a1_b * 32) + (a1_u * 16)) + 0), (((a2_b * 32) + (a2_u * 32)) + 16)] <- _c0_[2] (ldm=auto)
+        RegStore matmul__partial[_a3_ks, a0, (((a1_b * 32) + (a1_u * 16)) + 0), (((a2_b * 32) + (a2_u * 32)) + 24)] <- _c0_[3] (ldm=auto)

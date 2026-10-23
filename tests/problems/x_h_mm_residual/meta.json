@@ -1,0 +1,77 @@
+{
+ "id": "x_h_mm_residual",
+ "code": "a = torch.randn(128, 64, dtype=torch.float16); b = torch.randn(64, 128, dtype=torch.float16); r = torch.randn(128, 128, dtype=torch.float16); a @ b + r",
+ "rtol": 0.002,
+ "atol": 0.002,
+ "graph_inputs": [
+  "a",
+  "b",
+  "r"
+ ],
+ "graph_outputs": [
+  "add"
+ ],
+ "kernels": [
+  {
+   "node": "add",
+   "entry": "k_matmul_2d2305",
+   "arg_order": [
+    "b",
+    "a",
+    "r",
+    "add"
+   ],
+   "grid": [
+    8,
+    1,
+    1
+   ],
+   "block": [
+    128,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "b",
+     "dtype": "f16",
+     "shape": [
+      64,
+      128
+     ],
+     "seed": 1
+    },
+    {
+     "name": "a",
+     "dtype": "f16",
+     "shape": [
+      128,
+      64
+     ],
+     "seed": 0
+    },
+    {
+     "name": "r",
+     "dtype": "f16",
+     "shape": [
+      128,
+      128
+     ],
+     "seed": 2
+    },
+    {
+     "name": "add",
+     "dtype": "f16",
+     "shape": [
+      128,
+      128
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

@@ -1,0 +1,157 @@
+{
+  "inputs": [
+    "x0",
+    "x1",
+    "x2"
+  ],
+  "outputs": [
+    "gelu"
+  ],
+  "nodes": {
+    "gelu_half": {
+      "op": "ConstantOp",
+      "op_fields": {
+        "name": "gelu_half",
+        "value": 0.5,
+        "context_value": null,
+        "load_ops": [],
+        "source_path": null,
+        "source_parts": [],
+        "source_shape": null,
+        "source_dtype": null,
+        "source_graph": null
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "gelu_half",
+          "shape": [
+            1
+          ],
+          "dtype": "f16"
+        }
+      ]
+    },
+    "gelu_inv_sqrt2": {
+      "op": "ConstantOp",
+      "op_fields": {
+        "name": "gelu_inv_sqrt2",
+        "value": 0.7071067811865475,
+        "context_value": null,
+        "load_ops": [],
+        "source_path": null,
+        "source_parts": [],
+        "source_shape": null,
+        "source_dtype": null,
+        "source_graph": null
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "gelu_inv_sqrt2",
+          "shape": [
+            1
+          ],
+          "dtype": "f16"
+        }
+      ]
+    },
+    "gelu_one": {
+      "op": "ConstantOp",
+      "op_fields": {
+        "name": "gelu_one",
+        "value": 1.0,
+        "context_value": null,
+        "load_ops": [],
+        "source_path": null,
+        "source_parts": [],
+        "source_shape": null,
+        "source_dtype": null,
+        "source_graph": null
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "gelu_one",
+          "shape": [
+            1
+          ],
+          "dtype": "f16"
+        }
+      ]
+    },
+    "x0": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "x0",
+          "shape": [
+            128,
+            64
+          ],
+          "dtype": "f16"
+        }
+      ]
+    },
+    "x1": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "x1",
+          "shape": [
+            96,
+            64
+          ],
+          "dtype": "f16"
+        }
+      ]
+    },
+    "x2": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "x2",
+          "shape": [
+            96
+          ],
+          "dtype": "f16"
+        }
+      ]
+    },
+    "gelu": {
+      "op": "KernelOp",
+      "op_fields": {
+        "body": [
+          "Tile(axes=(Axis(name='a0_b', extent=Dim(2), window=Window(parent=Axis(name='a0', extent=Dim(128), window=None), base=None, bound=None, partition=False)), Axis(name='a1_b', extent=Dim(6), window=Window(parent=Axis(name='a1', extent=Dim(96), window=None), base=None, bound=None, partition=False)), Axis(name='a0_u', extent=Dim(1), window=None), Axis(name='a1_u', extent=Dim(2), window=None), Axis(name='_lane', extent=Dim(32), window=None)), body=(RegFragment(name='_a', role='a', shape=(16, 8, 16), dtype=DataType(name='f16', np=dtype('float16'), nbytes=2), count=4, nregs=None), RegFragment(name='_b0', role='b', shape=(16, 8, 16), dtype=DataType(name='f16', np=dtype('float16'), nbytes=2), count=1, nregs=None), RegFragment(name='_c0_0', role='c', shape=(16, 8, 16), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), count=1, nregs=None), RegFragment(name='_c1_0', role='c', shape=(16, 8, 16), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), count=1, nregs=None), RegFragment(name='_c2_0', role='c', shape=(16, 8, 16), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), count=1, nregs=None), RegFragment(name='_c3_0', role='c', shape=(16, 8, 16), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), count=1, nregs=None), StridedLoop(axis=Axis(name='a2', extent=Dim(64), window=None), start=Literal(value=0, dtype='int'), step=Literal(value=16, dtype='int'), body=(StridedLoop(axis=Axis(name='_r0', extent=Dim(4), window=None), start=Literal(value=0, dtype='int'), step=Literal(value=1, dtype='int'), body=(LdmatrixLoad(frag='_a[_r0]', src_buffer='x0', src_index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=64, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=64, dtype='int'))), right=BinaryExpr(op='*', left=Var(name='_r0'), right=Literal(value=16, dtype='int'))), Var(name='a2')), role='a', ldm=64, swizzle='NONE', staged=False, gmem_guard=None, k_zero=None, b_trans=False, pair_frag=None, byte_slab=False, scale_buffer=None, scale_index=(), scale_ldm=0, fragment_layout='m16n8k16', fragment_index=0),), unroll=True, end=None, seed=True), LdmatrixLoad(frag='_b0', src_buffer='x1', src_index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int')), Var(name='a2')), role='b', ldm=64, swizzle='NONE', staged=False, gmem_guard=None, k_zero=None, b_trans=True, pair_frag=None, byte_slab=False, scale_buffer=None, scale_index=(), scale_ldm=0, fragment_layout='m16n8k16', fragment_index=0), MmaSyncPtx(c_frag='_c0_0', a_frag='_a[0]', b_frag='_b0', shape=(16, 8, 16), ab_dtype='f16', c_dtype='f32', b_row_major=False, sfa_frag=None, sfb_frag=None), MmaSyncPtx(c_frag='_c1_0', a_frag='_a[1]', b_frag='_b0', shape=(16, 8, 16), ab_dtype='f16', c_dtype='f32', b_row_major=False, sfa_frag=None, sfb_frag=None), MmaSyncPtx(c_frag='_c2_0', a_frag='_a[2]', b_frag='_b0', shape=(16, 8, 16), ab_dtype='f16', c_dtype='f32', b_row_major=False, sfa_frag=None, sfb_frag=None), MmaSyncPtx(c_frag='_c3_0', a_frag='_a[3]', b_frag='_b0', shape=(16, 8, 16), ab_dtype='f16', c_dtype='f32', b_row_major=False, sfa_frag=None, sfb_frag=None)), unroll=True, end=None, seed=True), RegStore(dst_buffer='gelu', dst_index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=64, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=64, dtype='int'))), right=Literal(value=0, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int'))), frag='_c0_0', shape=(16, 8, 16), ldm=0, epilogue=Lambda(params=('acc0', '__N__', 'a1_b', 'a1_u'), body=(Load(names=('in0',), input='gelu_half', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in1',), input='gelu_inv_sqrt2', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in2',), input='gelu_one', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in5',), input='x2', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int')), right=Var(name='__N__')),), dtype=None), Assign(name='v1', op=ElementwiseImpl('add'), args=('acc0', 'in5'), dtype=None), Assign(name='v2', op=ElementwiseImpl('multiply'), args=('in1', 'v1'), dtype=None), Assign(name='v3', op=ElementwiseImpl('erf'), args=('v2',), dtype=None), Assign(name='v4', op=ElementwiseImpl('add'), args=('in2', 'v3'), dtype=None), Assign(name='v5', op=ElementwiseImpl('multiply'), args=('in0', 'v1'), dtype=None), Assign(name='v6', op=ElementwiseImpl('multiply'), args=('v4', 'v5'), dtype=None)), results=('v6',)), extra_frags=(), m_guard=None, n_guard=None, atomic=False, fragment_layout='m16n8k16', volta_interleaved=False, fragment_index=(0, 0), swizzle='NONE', row_dim=0, col_dim=1), RegStore(dst_buffer='gelu', dst_index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=64, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=64, dtype='int'))), right=Literal(value=16, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int'))), frag='_c1_0', shape=(16, 8, 16), ldm=0, epilogue=Lambda(params=('acc0', '__N__', 'a1_b', 'a1_u'), body=(Load(names=('in0',), input='gelu_half', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in1',), input='gelu_inv_sqrt2', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in2',), input='gelu_one', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in5',), input='x2', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int')), right=Var(name='__N__')),), dtype=None), Assign(name='v1', op=ElementwiseImpl('add'), args=('acc0', 'in5'), dtype=None), Assign(name='v2', op=ElementwiseImpl('multiply'), args=('in1', 'v1'), dtype=None), Assign(name='v3', op=ElementwiseImpl('erf'), args=('v2',), dtype=None), Assign(name='v4', op=ElementwiseImpl('add'), args=('in2', 'v3'), dtype=None), Assign(name='v5', op=ElementwiseImpl('multiply'), args=('in0', 'v1'), dtype=None), Assign(name='v6', op=ElementwiseImpl('multiply'), args=('v4', 'v5'), dtype=None)), results=('v6',)), extra_frags=(), m_guard=None, n_guard=None, atomic=False, fragment_layout='m16n8k16', volta_interleaved=False, fragment_index=(1, 0), swizzle='NONE', row_dim=0, col_dim=1), RegStore(dst_buffer='gelu', dst_index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=64, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=64, dtype='int'))), right=Literal(value=32, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int'))), frag='_c2_0', shape=(16, 8, 16), ldm=0, epilogue=Lambda(params=('acc0', '__N__', 'a1_b', 'a1_u'), body=(Load(names=('in0',), input='gelu_half', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in1',), input='gelu_inv_sqrt2', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in2',), input='gelu_one', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in5',), input='x2', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int')), right=Var(name='__N__')),), dtype=None), Assign(name='v1', op=ElementwiseImpl('add'), args=('acc0', 'in5'), dtype=None), Assign(name='v2', op=ElementwiseImpl('multiply'), args=('in1', 'v1'), dtype=None), Assign(name='v3', op=ElementwiseImpl('erf'), args=('v2',), dtype=None), Assign(name='v4', op=ElementwiseImpl('add'), args=('in2', 'v3'), dtype=None), Assign(name='v5', op=ElementwiseImpl('multiply'), args=('in0', 'v1'), dtype=None), Assign(name='v6', op=ElementwiseImpl('multiply'), args=('v4', 'v5'), dtype=None)), results=('v6',)), extra_frags=(), m_guard=None, n_guard=None, atomic=False, fragment_layout='m16n8k16', volta_interleaved=False, fragment_index=(2, 0), swizzle='NONE', row_dim=0, col_dim=1), RegStore(dst_buffer='gelu', dst_index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=64, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=64, dtype='int'))), right=Literal(value=48, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int'))), frag='_c3_0', shape=(16, 8, 16), ldm=0, epilogue=Lambda(params=('acc0', '__N__', 'a1_b', 'a1_u'), body=(Load(names=('in0',), input='gelu_half', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in1',), input='gelu_inv_sqrt2', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in2',), input='gelu_one', index=(Literal(value=0, dtype='int'),), dtype=None), Load(names=('in5',), input='x2', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=16, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=8, dtype='int'))), right=Literal(value=0, dtype='int')), right=Var(name='__N__')),), dtype=None), Assign(name='v1', op=ElementwiseImpl('add'), args=('acc0', 'in5'), dtype=None), Assign(name='v2', op=ElementwiseImpl('multiply'), args=('in1', 'v1'), dtype=None), Assign(name='v3', op=ElementwiseImpl('erf'), args=('v2',), dtype=None), Assign(name='v4', op=ElementwiseImpl('add'), args=('in2', 'v3'), dtype=None), Assign(name='v5', op=ElementwiseImpl('multiply'), args=('in0', 'v1'), dtype=None), Assign(name='v6', op=ElementwiseImpl('multiply'), args=('v4', 'v5'), dtype=None)), results=('v6',)), extra_frags=(), m_guard=None, n_guard=None, atomic=False, fragment_layout='m16n8k16', volta_interleaved=False, fragment_index=(3, 0), swizzle='NONE', row_dim=0, col_dim=1)), block_threads=64, aux_threads=0, raster_axes=('a0_b', 'a1_b'), raster_group=None, raster_orient='m')"
+        ],
+        "name": "k_linear_a99c89",
+        "zero_delegated": [],
+        "serial": []
+      },
+      "inputs": [
+        "gelu_inv_sqrt2",
+        "gelu_half",
+        "gelu_one",
+        "x2",
+        "x1",
+        "x0"
+      ],
+      "outputs": [
+        {
+          "name": "gelu",
+          "shape": [
+            128,
+            96
+          ],
+          "dtype": "f16"
+        }
+      ]
+    }
+  }
+}

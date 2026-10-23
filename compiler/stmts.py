@@ -13,7 +13,7 @@ import math
 from . import expr as X
 from .context import Context, Value
 from .dtypes import DType, INT_KINDS, common_kind, get, round_to
-from .memory import flat_index, load_values, store_values
+from .memory import flat_index, load_values, store_values, swizzled
 from .ops import COMPARISONS, SHIFTS, emit_native, emit_op, native, signature
 
 PARTIAL = 8    # copies per trip for innermost loops without emmy's unroll flag
@@ -203,23 +203,72 @@ def _strided_copies(s, step: Value, end: Value) -> int:
 
 
 def _has_loop(body) -> bool:
+    """Whether body holds a loop that stays rolled (fragment loops are unrolled: see below)."""
     for b in body:
         kind = type(b).__name__
-        if kind in ("Loop", "StridedLoop"):
+        if kind in ("Loop", "StridedLoop") and b.axis.name not in _fragment_index_vars(b.body):
             return True
         if kind == "Cond" and (_has_loop(b.body) or _has_loop(b.else_body or ())):
             return True
     return False
 
 
+def _fragment_index_vars(body) -> set[str]:
+    """Names used to pick a member of a tensor-core fragment family, as in `_c0_[_r0]`.
+
+    Fragments are registers, which cannot be indexed at run time, so a loop
+    over such a name must be unrolled (mma.py).
+    """
+    out = set()
+
+    def scan(v):
+        if isinstance(v, str):
+            stem, _, rest = v.partition("[")
+            if rest.endswith("]") and stem.isidentifier():
+                out.add(rest[:-1])
+        elif isinstance(v, (tuple, list)):
+            for x in v:
+                scan(x)
+
+    for b in body:
+        for name in getattr(b, "__dataclass_fields__", ()):
+            v = getattr(b, name)
+            if name in ("body", "else_body"):
+                out |= _fragment_index_vars(v or ())
+            else:
+                scan(v)
+    return out
+
+
+def _unroll(ctx: Context, s, values) -> None:
+    """The body once per axis value, the axis a constant in each copy."""
+    _seed_accumulators(ctx, s)
+    for v in values:
+        with ctx.scope():
+            ctx.bind(s.axis.name, X.imm(v))
+            lower_body(ctx, s.body)
+
+
 @handles("StridedLoop")
 def lower_strided_loop(ctx: Context, s) -> None:
-    """Cooperative loop: thread t visits start, start+step, ... below the axis extent."""
+    """Cooperative loop: thread t visits start, start+step, ... below the axis extent.
+
+    With constant bounds and emmy's unroll flag (or an axis that picks a
+    fragment member) it is unrolled like a Loop.
+    """
     end = X.lower(ctx, s.end) if s.end is not None else X.imm(int(s.axis.extent.value))
     if s.end is not None:
         ctx.bind(f"{s.axis.name}_end", end)   # emmy lets the body reference the hoisted bound
-    step = X.lower(ctx, s.step)
-    _counted_loop(ctx, s, X.lower(ctx, s.start), step, end, _strided_copies(s, step, end))
+    start, step = X.lower(ctx, s.start), X.lower(ctx, s.step)
+    picks_fragment = s.axis.name in _fragment_index_vars(s.body)
+    if start.is_imm and step.is_imm and end.is_imm and step.const > 0:
+        values = range(start.const, end.const, step.const)
+        if picks_fragment or (s.unroll and len(values) <= FULL_UNROLL_MAX and not _has_loop(s.body)):
+            _unroll(ctx, s, values)
+            return
+    if picks_fragment:
+        raise NotImplementedError(f"loop {s.axis.name} picks fragments but has runtime bounds")
+    _counted_loop(ctx, s, start, step, end, _strided_copies(s, step, end))
 
 
 @handles("Loop")
@@ -237,14 +286,12 @@ def lower_loop(ctx: Context, s) -> None:
     and ran attention out of registers (255, spilling: 5x slower).
     """
     extent = int(s.axis.extent.value)
-    if _has_loop(s.body):
+    if s.axis.name in _fragment_index_vars(s.body):
+        _unroll(ctx, s, range(extent))
+    elif _has_loop(s.body):
         _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent))
     elif s.unroll and extent <= FULL_UNROLL_MAX:
-        _seed_accumulators(ctx, s)
-        for i in range(extent):
-            with ctx.scope():
-                ctx.bind(s.axis.name, X.imm(i))
-                lower_body(ctx, s.body)
+        _unroll(ctx, s, range(extent))
     else:
         copies = PARTIAL if extent >= 2 * PARTIAL else 1
         _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent), copies)
@@ -290,10 +337,16 @@ def lower_load(ctx: Context, s) -> None:
 
 @handles("Write")
 def lower_write(ctx: Context, s) -> None:
-    """`buf[i] = (v0, v1, ...)`: vector store, or red.add when atomic."""
+    """`buf[i] = (v0, v1, ...)`: vector store, or red.add when atomic.
+
+    A write into a swizzled smem slab (an mma operand computed in place, not
+    copied) moves the vector's first index like a cp.async fill would; the
+    rest of an 8-half chunk follows it, as the XOR keeps chunks whole.
+    """
     buf = ctx.buffers[s.output]
     values = [ctx.lookup(v) for v in s.values]
-    store_values(ctx, buf, flat_index(ctx, buf, s.index), values, s.atomic, s.values)
+    flat = swizzled(ctx, flat_index(ctx, buf, s.index), getattr(s, "swizzle", "NONE"))
+    store_values(ctx, buf, flat, values, s.atomic, s.values)
 
 
 def _operands(ctx: Context, names, kinds) -> tuple[list[str], list]:
@@ -340,7 +393,12 @@ def compute(ctx: Context, op: str, names, dt) -> Value:
     emit_op(em, op, dst, args, consts)
     result = X.convert(ctx, Value(dst, out_kind), kind)
     if dtype is not None and dtype.rounds:
-        return Value(round_to(em, result.text, dtype), kind)
+        rounded = Value(round_to(em, result.text, dtype), kind)
+        if op == "multiply":
+            # An f16 product summed into an f32 accumulator is a matmul step: torch
+            # keeps the product exact there, so Accum's fma reads the operands.
+            ctx.products[rounded.text] = (args[0], args[1])
+        return rounded
     if op == "multiply" and result.text == dst:
         ctx.products[dst] = (args[0], args[1])
     return result
@@ -361,7 +419,9 @@ def lower_accum(ctx: Context, s) -> None:
     accumulator register directly. `base` (when set) replaces acc as the left
     operand. `acc + a*b` (a matmul or dot-product step) becomes one fma.rn, as
     nvcc contracts it in emmy's C - unless a or b is updated in place, since
-    the fma re-reads them here, after the multiply. Other accumulator dtypes
+    the fma re-reads them here, after the multiply. An f16 product is
+    contracted unrounded: emmy's C rounds it to half first, but torch's f16
+    matmul (the expected output) sums exact products in f32. Other accumulator dtypes
     (an f16 max, an int max) compute like an Assign and convert on the way in.
     """
     acc = ctx.mutable.get(s.name)

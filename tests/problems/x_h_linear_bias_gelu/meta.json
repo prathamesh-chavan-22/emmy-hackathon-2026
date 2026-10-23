@@ -1,0 +1,109 @@
+{
+ "id": "x_h_linear_bias_gelu",
+ "code": "torch.nn.functional.gelu(torch.nn.functional.linear(torch.randn(128, 64, dtype=torch.float16), torch.randn(96, 64, dtype=torch.float16), torch.randn(96, dtype=torch.float16)))",
+ "rtol": 0.004,
+ "atol": 0.004,
+ "graph_inputs": [
+  "x0",
+  "x1",
+  "x2"
+ ],
+ "graph_outputs": [
+  "gelu"
+ ],
+ "kernels": [
+  {
+   "node": "gelu",
+   "entry": "k_linear_a99c89",
+   "arg_order": [
+    "gelu_inv_sqrt2",
+    "gelu_half",
+    "gelu_one",
+    "x2",
+    "x1",
+    "x0",
+    "gelu"
+   ],
+   "grid": [
+    12,
+    1,
+    1
+   ],
+   "block": [
+    64,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "gelu_inv_sqrt2",
+     "dtype": "f16",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.7071067811865475
+     ]
+    },
+    {
+     "name": "gelu_half",
+     "dtype": "f16",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.5
+     ]
+    },
+    {
+     "name": "gelu_one",
+     "dtype": "f16",
+     "shape": [
+      1
+     ],
+     "data": [
+      1.0
+     ]
+    },
+    {
+     "name": "x2",
+     "dtype": "f16",
+     "shape": [
+      96
+     ],
+     "seed": 2
+    },
+    {
+     "name": "x1",
+     "dtype": "f16",
+     "shape": [
+      96,
+      64
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x0",
+     "dtype": "f16",
+     "shape": [
+      128,
+      64
+     ],
+     "seed": 0
+    },
+    {
+     "name": "gelu",
+     "dtype": "f16",
+     "shape": [
+      128,
+      96
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

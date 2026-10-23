@@ -1,0 +1,102 @@
+    Tile[a0_b, a1_b, a0_u, a1_u, _lane] (N=1024)
+        RegFragment a:f16 _a0[4] (16x8x16)
+        RegFragment a:f16 _a1[4] (16x8x16)
+        RegFragment a:f16 _a2[4] (16x8x16)
+        RegFragment a:f16 _a3[4] (16x8x16)
+        RegFragment b:f16 _b[2][2] (16x8x16)
+        RegFragment c:f32 _c0_[2][4] (16x8x16)
+        RegFragment c:f32 _c1_[2][4] (16x8x16)
+        RegFragment c:f32 _c2_[2][4] (16x8x16)
+        RegFragment c:f32 _c3_[2][4] (16x8x16)
+        Smem __half _a_smem[256, 32] align=512
+        Smem __half _b_smem[64, 64] align=1024
+        for _fb in ((((a0_u * 4) + a1_u) * 32) + _lane)..256:512
+            cp.async[16B] _b_smem[((_fb * 8) / 64), ((_fb * 8) % 64)] swz=B128 <- w2[(0 + ((_fb * 8) / 64)), ((a1_b * 64) + ((_fb * 8) % 64))]
+        cp.async.commit_group
+        for _ks in 0..256:32
+            for _fb in ((((a0_u * 4) + a1_u) * 32) + _lane)..256:512
+                cp.async[16B] _b_smem[(((((_ks / 32) + 1) % 2) * 32) + ((_fb * 8) / 64)), ((_fb * 8) % 64)] swz=B128 <- w2[((((_ks + 32) < 256) ? (_ks + 32) : 224) + ((_fb * 8) / 64)), ((a1_b * 64) + ((_fb * 8) % 64))]
+            for _fa in ((((a0_u * 4) + a1_u) * 32) + _lane)..1024:512
+                for a3 in 0..128
+                    in1__c0 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c0 = load w1[a3, (_ks + ((_fa * 8) % 32))]
+                    f16 v0__c0 = multiply(in0__c0, in1__c0)
+                    f32 acc0__c0 <- add(acc0__c0, v0__c0)
+                for a3 in 0..128
+                    in1__c1 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c1 = load w1[a3, (_ks + (((_fa * 8) % 32) + 1))]
+                    f16 v0__c1 = multiply(in0__c1, in1__c1)
+                    f32 acc0__c1 <- add(acc0__c1, v0__c1)
+                for a3 in 0..128
+                    in1__c2 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c2 = load w1[a3, (_ks + (((_fa * 8) % 32) + 2))]
+                    f16 v0__c2 = multiply(in0__c2, in1__c2)
+                    f32 acc0__c2 <- add(acc0__c2, v0__c2)
+                for a3 in 0..128
+                    in1__c3 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c3 = load w1[a3, (_ks + (((_fa * 8) % 32) + 3))]
+                    f16 v0__c3 = multiply(in0__c3, in1__c3)
+                    f32 acc0__c3 <- add(acc0__c3, v0__c3)
+                for a3 in 0..128
+                    in1__c4 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c4 = load w1[a3, (_ks + (((_fa * 8) % 32) + 4))]
+                    f16 v0__c4 = multiply(in0__c4, in1__c4)
+                    f32 acc0__c4 <- add(acc0__c4, v0__c4)
+                for a3 in 0..128
+                    in1__c5 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c5 = load w1[a3, (_ks + (((_fa * 8) % 32) + 5))]
+                    f16 v0__c5 = multiply(in0__c5, in1__c5)
+                    f32 acc0__c5 <- add(acc0__c5, v0__c5)
+                for a3 in 0..128
+                    in1__c6 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c6 = load w1[a3, (_ks + (((_fa * 8) % 32) + 6))]
+                    f16 v0__c6 = multiply(in0__c6, in1__c6)
+                    f32 acc0__c6 <- add(acc0__c6, v0__c6)
+                for a3 in 0..128
+                    in1__c7 = load x[((((a0_b * 256) + ((_fa * 8) / 32)) < 64) ? ((a0_b * 256) + ((_fa * 8) / 32)) : (64 - 1)), a3]
+                    in0__c7 = load w1[a3, (_ks + (((_fa * 8) % 32) + 7))]
+                    f16 v0__c7 = multiply(in0__c7, in1__c7)
+                    f32 acc0__c7 <- add(acc0__c7, v0__c7)
+                f16 v1__c0 = copy(acc0__c0)
+                f16 v1__c1 = copy(acc0__c1)
+                f16 v1__c2 = copy(acc0__c2)
+                f16 v1__c3 = copy(acc0__c3)
+                f16 v1__c4 = copy(acc0__c4)
+                f16 v1__c5 = copy(acc0__c5)
+                f16 v1__c6 = copy(acc0__c6)
+                f16 v1__c7 = copy(acc0__c7)
+                f16 v2__c0 = relu(v1__c0)
+                f16 v2__c1 = relu(v1__c1)
+                f16 v2__c2 = relu(v1__c2)
+                f16 v2__c3 = relu(v1__c3)
+                f16 v2__c4 = relu(v1__c4)
+                f16 v2__c5 = relu(v1__c5)
+                f16 v2__c6 = relu(v1__c6)
+                f16 v2__c7 = relu(v1__c7)
+                _a_smem[((_fa * 8) / 32), ((_fa * 8) % 32)] swz=B64 = (v2__c0, v2__c1, v2__c2, v2__c3, v2__c4, v2__c5, v2__c6, v2__c7)
+            cp.async.commit_group
+            cp.async.wait_group(1)
+            Sync
+            for _ki in 0..32:16
+                LdmatrixLoad _a0 <- _a_smem[((a0_u * 64) + 0), _ki] (x4, ldm=32)
+                LdmatrixLoad _a1 <- _a_smem[((a0_u * 64) + 16), _ki] (x4, ldm=32)
+                LdmatrixLoad _a2 <- _a_smem[((a0_u * 64) + 32), _ki] (x4, ldm=32)
+                LdmatrixLoad _a3 <- _a_smem[((a0_u * 64) + 48), _ki] (x4, ldm=32)
+                LdmatrixLoad (_b[0], _b[1]) <- _b_smem[((((_ks / 32) % 2) * 32) + _ki), ((a1_u * 16) + 0)] (x4.trans pair, ldm=64)
+                for _r0 in 0..2:1
+                    MmaSyncPtx _c0_[_r0] += _a0 @ _b[_r0] (m16n8k16 f16)
+                for _r0 in 0..2:1
+                    MmaSyncPtx _c1_[_r0] += _a1 @ _b[_r0] (m16n8k16 f16)
+                for _r0 in 0..2:1
+                    MmaSyncPtx _c2_[_r0] += _a2 @ _b[_r0] (m16n8k16 f16)
+                for _r0 in 0..2:1
+                    MmaSyncPtx _c3_[_r0] += _a3 @ _b[_r0] (m16n8k16 f16)
+            Sync
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 0), (((a1_b * 64) + (a1_u * 16)) + 0)] <- _c0_[0] m<64 (ldm=auto)
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 0), (((a1_b * 64) + (a1_u * 16)) + 8)] <- _c0_[1] m<64 (ldm=auto)
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 16), (((a1_b * 64) + (a1_u * 16)) + 0)] <- _c1_[0] m<64 (ldm=auto)
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 16), (((a1_b * 64) + (a1_u * 16)) + 8)] <- _c1_[1] m<64 (ldm=auto)
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 32), (((a1_b * 64) + (a1_u * 16)) + 0)] <- _c2_[0] m<64 (ldm=auto)
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 32), (((a1_b * 64) + (a1_u * 16)) + 8)] <- _c2_[1] m<64 (ldm=auto)
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 48), (((a1_b * 64) + (a1_u * 16)) + 0)] <- _c3_[0] m<64 (ldm=auto)
+        RegStore matmul_1[(((a0_b * 256) + (a0_u * 64)) + 48), (((a1_b * 64) + (a1_u * 16)) + 8)] <- _c3_[1] m<64 (ldm=auto)

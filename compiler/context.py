@@ -58,6 +58,8 @@ class Context:
     smem_pool: int = 0
     smem_used: int = 0
     smem_align: int = 16   # pool base alignment: the largest any array asks for
+    # Tensor-core register fragments by name (mma.py); not scoped, as emmy's names are unique.
+    frags: dict = field(default_factory=dict)
 
     def bind(self, name: str, value: Value) -> None:
         self.env[name] = value
