@@ -154,14 +154,16 @@ def package(spec: dict, dump: Path, outdir: Path, hidden: bool = False) -> dict:
     # ---- launch order: a kernel runs after the kernels whose output it reads.
     # The dump lists CudaOps in node order, which is not always that order (an
     # attention with odd sizes places a helper kernel after its consumer).
-    ordered, done = [], set()
-    while len(ordered) < len(kernels):
-        ready = [k for k in kernels if k not in ordered and
-                 all(a["name"] in done for a in k["args"] if a.get("intermediate"))]
-        if not ready:
+    # (A kernel's own outputs are not intermediates of its args: see above.)
+    pending, ordered, done = list(kernels), [], set()
+    while pending:
+        ready = next((k for k in pending if
+                      all(a["name"] in done for a in k["args"] if a.get("intermediate"))), None)
+        if ready is None:
             raise ValueError("kernels read each other's outputs in a cycle")
-        ordered.append(ready[0])
-        done |= {a["name"] for a in ready[0]["args"] if a.get("output")}
+        pending.remove(ready)
+        ordered.append(ready)
+        done |= {a["name"] for a in ready["args"] if a.get("output")}
     kernels = ordered
 
     # ---- expected outputs from the seeded inputs -------------------------

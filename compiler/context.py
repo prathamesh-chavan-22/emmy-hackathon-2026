@@ -54,6 +54,9 @@ class Context:
     # Result register of each `multiply` -> its operand registers, so an Accum
     # can fold `acc + a*b` into one fma (registers are unique: no scoping needed).
     products: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # Whether an f16 product summed in f32 stays exact (a matmul) or is rounded
+    # to half first (an elementwise multiply): see matmul_kernel in __init__.py.
+    exact_f16_products: bool = False
     # Dynamic shared memory pool (meta smem_bytes > 0): its size and the next free byte.
     smem_pool: int = 0
     smem_used: int = 0

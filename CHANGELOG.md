@@ -235,3 +235,27 @@ Same schedules emmy chose; better instructions inside them. Measured on the runn
   outputs it has. Real tests now: 26 x_h_* specs (16x16 to 1024x1024, odd shapes, M=1, batched,
   transposed, linear, bias/relu/gelu/residual epilogues, MLP, attention, sdpa, causal, masked).
 - PTX of all 171 earlier tests is byte-identical to the previous commit.
+
+## 2026-10-25 - review round 5: Fable + code review of the tensor cores (15/15 open, 154/154 extra, 43/43 sweep)
+
+- **Bug found: launch bounds.** emmy's CUDA declares `__launch_bounds__(block)`, which caps nvcc's
+  registers so the block can launch. Our PTX never said the block size, so ptxas used up to 255
+  registers; a 1024-thread `softmax(s) @ v` then failed with "too many resources requested". We now
+  emit `.maxntid N`, the PTX spelling of the same promise. Overall time is unchanged (5948 vs 5882 us).
+- **Fixed our own over-correction: one IR, two torch semantics.** Last round we kept f16 products
+  exact before an f32 sum, to match torch's matmul. But `(a * b).sum(-1)` produces the *same* IR and
+  torch rounds those products (each op is its own kernel there) - 2 ulps off. Only the source op
+  separates them, and the kernel name is where it survives: products stay exact in matmul / linear /
+  bmm / sdpa / ... kernels only. The new test is now bit-exact.
+- **Unrolling**: a loop around mma blocks no longer gets 8 partial body copies (register blow-up risk
+  on long K); emmy's `#pragma unroll` k-step still unrolls fully, as nvcc would.
+- **Cleanups from the review**: dead branch and shadowed names in the global-memory fragment loader,
+  an unused field, WHY comments (full-warp shuffle, why f16 accumulators are rejected), one base
+  address per register pair instead of one per half (~100 fewer instructions per attention kernel),
+  atomic stores skip the slab swizzle as in emmy, generator ordering by identity.
+- **Coverage for paths no test ran**: scores read from memory per fragment element
+  (`softmax(s) @ v`, square and odd), transposed B straight from global memory (N = 8, odd),
+  masked attention, f16 product reductions. 9 new tests.
+- Rejected review findings (with reasons in the code): reading the matmul origin from the IR (it is
+  not there - the KernelOp has only body/name), and swizzle keyed on memory space (emmy keys it on
+  atomic).

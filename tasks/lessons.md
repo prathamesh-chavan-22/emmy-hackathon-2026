@@ -18,3 +18,10 @@
   the way the IR says (e.g. truncated K) - if that matches, the bug is emmy's, and emmy's own reference
   kernel will show it too.
 
+- **One IR can carry two torch semantics.** `(a * b).sum(-1)` and a vector matmul lower to the same
+  f16-multiply-into-f32 loop, but torch rounds the first one's products and not the second's. Before
+  "fixing" a numeric mismatch for one case, write the test for its twin; the source op (kept in the
+  kernel name) is the only thing that tells them apart.
+- **Mirror every launch hint the reference CUDA carries.** emmy's `__launch_bounds__(block)` caps nvcc's
+  registers; PTX without `.maxntid` let ptxas use 255 and a 1024-thread block could not launch. A test
+  that runs at our usual 128-256 threads never shows it - include a large-block shape.

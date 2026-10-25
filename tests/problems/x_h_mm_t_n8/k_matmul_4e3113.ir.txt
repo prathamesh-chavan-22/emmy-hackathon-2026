@@ -1,0 +1,9 @@
+    Tile[a0_b, a1_b, a0_u, a1_u, _lane] (N=1024)
+        RegFragment a:f16 _a0[4] (16x8x16)
+        RegFragment b:f16 _b0[2] (16x8x16)
+        RegFragment c:f32 _c0_0[4] (16x8x16)
+        for a2 in 0..64:16
+            LdmatrixLoad _a0 <- x0[(((a0_b * 16) + (a0_u * 16)) + 0), a2] (gmem-direct, ldm=64)
+            LdmatrixLoad _b0 <- x1[(((a1_b * 32) + (a1_u * 8)) + 0), a2] (gmem-direct guard<8, ldm=64)
+            MmaSyncPtx _c0_0 += _a0 @ _b0 (m16n8k16 f16)
+        RegStore matmul[(((a0_b * 16) + (a0_u * 16)) + 0), (((a1_b * 32) + (a1_u * 8)) + 0)] <- _c0_0 n<8 (ldm=auto)

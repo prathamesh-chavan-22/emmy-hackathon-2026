@@ -202,13 +202,19 @@ def _strided_copies(s, step: Value, end: Value) -> int:
     return PARTIAL
 
 
-def _has_loop(body) -> bool:
-    """Whether body holds a loop that stays rolled (fragment loops are unrolled: see below)."""
+def _has_loop(body, rolled_only: bool = False) -> bool:
+    """Whether body holds a loop. rolled_only skips fragment loops, which are
+    always unrolled: a loop around them can still unroll fully (emmy's
+    `#pragma unroll` over a k-step of mma blocks), but gets no partial copies."""
     for b in body:
         kind = type(b).__name__
-        if kind in ("Loop", "StridedLoop") and b.axis.name not in _fragment_index_vars(b.body):
-            return True
-        if kind == "Cond" and (_has_loop(b.body) or _has_loop(b.else_body or ())):
+        if kind in ("Loop", "StridedLoop"):
+            if not (rolled_only and b.axis.name in _fragment_index_vars(b.body)):
+                return True
+            if _has_loop(b.body, rolled_only):   # a rolled loop inside the unrolled one
+                return True
+        if kind == "Cond" and (_has_loop(b.body, rolled_only)
+                               or _has_loop(b.else_body or (), rolled_only)):
             return True
     return False
 
@@ -263,7 +269,8 @@ def lower_strided_loop(ctx: Context, s) -> None:
     picks_fragment = s.axis.name in _fragment_index_vars(s.body)
     if start.is_imm and step.is_imm and end.is_imm and step.const > 0:
         values = range(start.const, end.const, step.const)
-        if picks_fragment or (s.unroll and len(values) <= FULL_UNROLL_MAX and not _has_loop(s.body)):
+        if picks_fragment or (s.unroll and len(values) <= FULL_UNROLL_MAX
+                               and not _has_loop(s.body, rolled_only=True)):
             _unroll(ctx, s, values)
             return
     if picks_fragment:
@@ -283,15 +290,17 @@ def lower_loop(ctx: Context, s) -> None:
       are in flight per trip instead of one latency-bound chain. Strided loops
       get the same treatment.
     A loop holding other loops stays rolled: copying whole loops bought nothing
-    and ran attention out of registers (255, spilling: 5x slower).
+    and ran attention out of registers (255, spilling: 5x slower). The one
+    exception is emmy's `unroll` over fragment loops only (a k-step of mma
+    blocks), which nvcc unrolls fully too.
     """
     extent = int(s.axis.extent.value)
     if s.axis.name in _fragment_index_vars(s.body):
         _unroll(ctx, s, range(extent))
+    elif s.unroll and extent <= FULL_UNROLL_MAX and not _has_loop(s.body, rolled_only=True):
+        _unroll(ctx, s, range(extent))
     elif _has_loop(s.body):
         _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent))
-    elif s.unroll and extent <= FULL_UNROLL_MAX:
-        _unroll(ctx, s, range(extent))
     else:
         copies = PARTIAL if extent >= 2 * PARTIAL else 1
         _counted_loop(ctx, s, X.imm(0), X.imm(1), X.imm(extent), copies)
@@ -394,9 +403,9 @@ def compute(ctx: Context, op: str, names, dt) -> Value:
     result = X.convert(ctx, Value(dst, out_kind), kind)
     if dtype is not None and dtype.rounds:
         rounded = Value(round_to(em, result.text, dtype), kind)
-        if op == "multiply":
-            # An f16 product summed into an f32 accumulator is a matmul step: torch
-            # keeps the product exact there, so Accum's fma reads the operands.
+        if op == "multiply" and ctx.exact_f16_products:
+            # In a matmul torch keeps the f16 product exact, so an Accum that
+            # sums it reads the operands into its fma, skipping this rounding.
             ctx.products[rounded.text] = (args[0], args[1])
         return rounded
     if op == "multiply" and result.text == dst:
@@ -420,8 +429,8 @@ def lower_accum(ctx: Context, s) -> None:
     operand. `acc + a*b` (a matmul or dot-product step) becomes one fma.rn, as
     nvcc contracts it in emmy's C - unless a or b is updated in place, since
     the fma re-reads them here, after the multiply. An f16 product is
-    contracted unrounded: emmy's C rounds it to half first, but torch's f16
-    matmul (the expected output) sums exact products in f32. Other accumulator dtypes
+    contracted unrounded in a matmul kernel: emmy's C rounds it to half first,
+    but torch's f16 matmul (the expected output) sums exact products in f32. Other accumulator dtypes
     (an f16 max, an int max) compute like an Assign and convert on the way in.
     """
     acc = ctx.mutable.get(s.name)

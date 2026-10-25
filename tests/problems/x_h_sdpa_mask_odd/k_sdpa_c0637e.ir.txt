@@ -1,0 +1,141 @@
+    Tile[a0, a1, a6, a2_co] (N=102400)
+        in0 = load scaled_dot_product_attention_scale[0]
+        for a2 in a2_co..120:64
+            for a3 in 0..32
+                in1 = load x0[0, a0, a1, a3]
+                in2 = load x1[0, a0, a2, a3]
+                f16 v0 = multiply(in1, in2)
+                f32 acc0 <- add(acc0, v0)
+            f32 v1 = multiply(acc0, in0)
+            in3 = load x3[a1, a2]
+            f32 v2 = add(in3, v1)
+            f32 one = 1.0
+            f32 v2__gn = maximum(acc1, v2)
+            f32 v2__dg = subtract(acc1, v2__gn)
+            f32 v2__alpha = exp(v2__dg)
+            f32 v2__dg_o = subtract(v2, v2__gn)
+            f32 v2__beta = exp(v2__dg_o)
+            f32 v2__acc3_sa = multiply(acc3, v2__alpha)
+            f32 v2__acc3_sb = multiply(one, v2__beta)
+            f32 acc3 <- add(v2__acc3_sa, v2__acc3_sb)
+            f32 v2__acc5__sum_sa = multiply(acc5__sum, v2__alpha)
+            in9 = load x2[0, a0, a2, a6]
+            f32 v2__acc5__sum_sb = multiply(in9, v2__beta)
+            f32 acc5__sum <- add(v2__acc5__sum_sa, v2__acc5__sum_sb)
+            f32 acc1 <- maximum(acc1, v2)
+            for a3 in 0..32
+                in1__r1 = load x0[0, a0, a1, a3]
+                in2__r1 = load x1[0, a0, ((a2 + 16) % 120), a3]
+                f16 v0__r1 = multiply(in1__r1, in2__r1)
+                f32 acc0__r1 <- add(acc0__r1, v0__r1)
+            f32 v1__r1 = multiply(acc0__r1, in0)
+            in3__r1 = load x3[a1, ((a2 + 16) % 120)]
+            f32 v2__r1 = add(in3__r1, v1__r1)
+            Init(f32 v2__r1__id = -1e+30)
+            v2__r1__mv = v2__r1 when (((a2 + 16) < 120))
+                         v2__r1__id when (1)
+            f32 one__r1 = 1.0
+            f32 v2__gn__r1 = maximum(acc1__r1, v2__r1__mv)
+            f32 v2__dg__r1 = subtract(acc1__r1, v2__gn__r1)
+            f32 v2__alpha__r1 = exp(v2__dg__r1)
+            f32 v2__dg_o__r1 = subtract(v2__r1__mv, v2__gn__r1)
+            f32 v2__beta__r1 = exp(v2__dg_o__r1)
+            f32 v2__acc3_sa__r1 = multiply(acc3__r1, v2__alpha__r1)
+            f32 v2__acc3_sb__r1 = multiply(one__r1, v2__beta__r1)
+            f32 acc3__r1 <- add(v2__acc3_sa__r1, v2__acc3_sb__r1)
+            f32 v2__acc5__sum_sa__r1 = multiply(acc5__sum__r1, v2__alpha__r1)
+            in9__r1 = load x2[0, a0, ((a2 + 16) % 120), a6]
+            f32 v2__acc5__sum_sb__r1 = multiply(in9__r1, v2__beta__r1)
+            f32 acc5__sum__r1 <- add(v2__acc5__sum_sa__r1, v2__acc5__sum_sb__r1)
+            f32 acc1__r1 <- maximum(acc1__r1, v2__r1__mv)
+            for a3 in 0..32
+                in1__r2 = load x0[0, a0, a1, a3]
+                in2__r2 = load x1[0, a0, ((a2 + 32) % 120), a3]
+                f16 v0__r2 = multiply(in1__r2, in2__r2)
+                f32 acc0__r2 <- add(acc0__r2, v0__r2)
+            f32 v1__r2 = multiply(acc0__r2, in0)
+            in3__r2 = load x3[a1, ((a2 + 32) % 120)]
+            f32 v2__r2 = add(in3__r2, v1__r2)
+            Init(f32 v2__r2__id = -1e+30)
+            v2__r2__mv = v2__r2 when (((a2 + 32) < 120))
+                         v2__r2__id when (1)
+            f32 one__r2 = 1.0
+            f32 v2__gn__r2 = maximum(acc1__r2, v2__r2__mv)
+            f32 v2__dg__r2 = subtract(acc1__r2, v2__gn__r2)
+            f32 v2__alpha__r2 = exp(v2__dg__r2)
+            f32 v2__dg_o__r2 = subtract(v2__r2__mv, v2__gn__r2)
+            f32 v2__beta__r2 = exp(v2__dg_o__r2)
+            f32 v2__acc3_sa__r2 = multiply(acc3__r2, v2__alpha__r2)
+            f32 v2__acc3_sb__r2 = multiply(one__r2, v2__beta__r2)
+            f32 acc3__r2 <- add(v2__acc3_sa__r2, v2__acc3_sb__r2)
+            f32 v2__acc5__sum_sa__r2 = multiply(acc5__sum__r2, v2__alpha__r2)
+            in9__r2 = load x2[0, a0, ((a2 + 32) % 120), a6]
+            f32 v2__acc5__sum_sb__r2 = multiply(in9__r2, v2__beta__r2)
+            f32 acc5__sum__r2 <- add(v2__acc5__sum_sa__r2, v2__acc5__sum_sb__r2)
+            f32 acc1__r2 <- maximum(acc1__r2, v2__r2__mv)
+            for a3 in 0..32
+                in1__r3 = load x0[0, a0, a1, a3]
+                in2__r3 = load x1[0, a0, ((a2 + 48) % 120), a3]
+                f16 v0__r3 = multiply(in1__r3, in2__r3)
+                f32 acc0__r3 <- add(acc0__r3, v0__r3)
+            f32 v1__r3 = multiply(acc0__r3, in0)
+            in3__r3 = load x3[a1, ((a2 + 48) % 120)]
+            f32 v2__r3 = add(in3__r3, v1__r3)
+            Init(f32 v2__r3__id = -1e+30)
+            v2__r3__mv = v2__r3 when (((a2 + 48) < 120))
+                         v2__r3__id when (1)
+            f32 one__r3 = 1.0
+            f32 v2__gn__r3 = maximum(acc1__r3, v2__r3__mv)
+            f32 v2__dg__r3 = subtract(acc1__r3, v2__gn__r3)
+            f32 v2__alpha__r3 = exp(v2__dg__r3)
+            f32 v2__dg_o__r3 = subtract(v2__r3__mv, v2__gn__r3)
+            f32 v2__beta__r3 = exp(v2__dg_o__r3)
+            f32 v2__acc3_sa__r3 = multiply(acc3__r3, v2__alpha__r3)
+            f32 v2__acc3_sb__r3 = multiply(one__r3, v2__beta__r3)
+            f32 acc3__r3 <- add(v2__acc3_sa__r3, v2__acc3_sb__r3)
+            f32 v2__acc5__sum_sa__r3 = multiply(acc5__sum__r3, v2__alpha__r3)
+            in9__r3 = load x2[0, a0, ((a2 + 48) % 120), a6]
+            f32 v2__acc5__sum_sb__r3 = multiply(in9__r3, v2__beta__r3)
+            f32 acc5__sum__r3 <- add(v2__acc5__sum_sa__r3, v2__acc5__sum_sb__r3)
+            f32 acc1__r3 <- maximum(acc1__r3, v2__r3__mv)
+        f32 acc1__r1__gn = maximum(acc1, acc1__r1)
+        f32 acc1__r1__dg = subtract(acc1, acc1__r1__gn)
+        f32 acc1__r1__alpha = exp(acc1__r1__dg)
+        f32 acc1__r1__dg_o = subtract(acc1__r1, acc1__r1__gn)
+        f32 acc1__r1__beta = exp(acc1__r1__dg_o)
+        f32 acc1__r1__acc3_sa = multiply(acc1__r1__alpha, acc3)
+        f32 acc1__r1__acc3_sb = multiply(acc1__r1__beta, acc3__r1)
+        f32 acc3 <- add(acc1__r1__acc3_sa, acc1__r1__acc3_sb)
+        f32 acc1__r1__acc5__sum_sa = multiply(acc1__r1__alpha, acc5__sum)
+        f32 acc1__r1__acc5__sum_sb = multiply(acc1__r1__beta, acc5__sum__r1)
+        f32 acc5__sum <- add(acc1__r1__acc5__sum_sa, acc1__r1__acc5__sum_sb)
+        f32 acc1 <- maximum(acc1, acc1__r1)
+        f32 acc1__r2__gn = maximum(acc1, acc1__r2)
+        f32 acc1__r2__dg = subtract(acc1, acc1__r2__gn)
+        f32 acc1__r2__alpha = exp(acc1__r2__dg)
+        f32 acc1__r2__dg_o = subtract(acc1__r2, acc1__r2__gn)
+        f32 acc1__r2__beta = exp(acc1__r2__dg_o)
+        f32 acc1__r2__acc3_sa = multiply(acc1__r2__alpha, acc3)
+        f32 acc1__r2__acc3_sb = multiply(acc1__r2__beta, acc3__r2)
+        f32 acc3 <- add(acc1__r2__acc3_sa, acc1__r2__acc3_sb)
+        f32 acc1__r2__acc5__sum_sa = multiply(acc1__r2__alpha, acc5__sum)
+        f32 acc1__r2__acc5__sum_sb = multiply(acc1__r2__beta, acc5__sum__r2)
+        f32 acc5__sum <- add(acc1__r2__acc5__sum_sa, acc1__r2__acc5__sum_sb)
+        f32 acc1 <- maximum(acc1, acc1__r2)
+        f32 acc1__r3__gn = maximum(acc1, acc1__r3)
+        f32 acc1__r3__dg = subtract(acc1, acc1__r3__gn)
+        f32 acc1__r3__alpha = exp(acc1__r3__dg)
+        f32 acc1__r3__dg_o = subtract(acc1__r3, acc1__r3__gn)
+        f32 acc1__r3__beta = exp(acc1__r3__dg_o)
+        f32 acc1__r3__acc3_sa = multiply(acc1__r3__alpha, acc3)
+        f32 acc1__r3__acc3_sb = multiply(acc1__r3__beta, acc3__r3)
+        f32 acc3 <- add(acc1__r3__acc3_sa, acc1__r3__acc3_sb)
+        f32 acc1__r3__acc5__sum_sa = multiply(acc1__r3__alpha, acc5__sum)
+        f32 acc1__r3__acc5__sum_sb = multiply(acc1__r3__beta, acc5__sum__r3)
+        f32 acc5__sum <- add(acc1__r3__acc5__sum_sa, acc1__r3__acc5__sum_sb)
+        f32 acc1 <- maximum(acc1, acc1__r3)
+        WarpShuffle(acc1, acc3, acc5__sum, length=16)
+        if ((a2_co == 0)):
+            f32 v8 = reciprocal(acc3)
+            f32 acc5 = multiply(acc5__sum, v8)
+            scaled_dot_product_attention[0, a0, a1, a6] = acc5

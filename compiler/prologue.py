@@ -6,6 +6,7 @@ the PTX header and the parameter list in meta.json order.
 
 from __future__ import annotations
 
+import math
 import re
 
 from .context import Buffer, Context, Value
@@ -35,7 +36,10 @@ def signature(spec: KernelSpec) -> str:
     params = ",\n".join(
         f"\t.param {_scalar_type(p)[0] if p.scalar else '.u64'} {param_symbol(p.name)}"
         for p in spec.params)
-    return f".visible .entry {spec.name}(\n{params}\n)"
+    # .maxntid is emmy's __launch_bounds__(block): without it ptxas may use up
+    # to 255 registers per thread, too many for a large block to launch at all.
+    bounds = f"\n.maxntid {math.prod(spec.block)}" if spec.block else ""
+    return f".visible .entry {spec.name}(\n{params}\n){bounds}"
 
 
 def load_params(ctx: Context, spec: KernelSpec) -> None:

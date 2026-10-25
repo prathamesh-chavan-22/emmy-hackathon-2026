@@ -308,6 +308,14 @@ OPEN = [
          ref=lambda x: [f16(f64(x).sum())], rtol=2e-3, atol=0.07),
     dict(id="x_d_f16_mean", code=f"torch.randn(64, 512, {H}).mean(dim=-1)",
          ref=lambda x: [f16(f64(x).mean(-1))], rtol=1e-2, atol=2e-3),
+    # An elementwise f16 product is its own torch op, so it is rounded to half
+    # before the sum - unlike a matmul's products (see x_h_mm_vec).
+    dict(id="x_d_f16_dot", code=f"a = torch.randn(64, 512, {H}); b = torch.randn(64, 512, {H}); (a * b).sum(-1)",
+         ref=lambda a, b: [f16(f64(f16(f32(a) * f32(b))).sum(-1))], rtol=1e-3, atol=1e-3),
+    dict(id="x_d_f16_dot_f32", code=f"a = torch.randn(64, 512, {H}); b = torch.randn(64, 512, {H}); (a * b).float().sum(-1)",
+         ref=lambda a, b: [f32(f64(f16(f32(a) * f32(b))).sum(-1))], rtol=1e-5, atol=1e-5),
+    dict(id="x_d_f16_sq_mean", code=f"x = torch.randn(64, 512, {H}); (x * x).mean(-1)",
+         ref=lambda x: [f16(f64(f16(f32(x) * f32(x))).mean(-1))], rtol=1e-3, atol=1e-4),
     dict(id="x_d_f32_to_f16", code="torch.randn(1024).half() * 2",
          ref=lambda x: [f16(x) * f16(2)], **EXACT),
     dict(id="x_d_f16_to_f32", code=f"torch.randn(1024, {H}).float() * 3.0",
@@ -411,6 +419,29 @@ OPEN = [
                                   f"torch.randn(1, 2, 64, 32, {H}), torch.randn(1, 2, 64, 32, {H}), "
                                   f"attn_mask=torch.randn(64, 64, {H}))",
          ref=lambda q, k, v, m: [_attn_h(q, np.swapaxes(k, -1, -2), v, 1 / np.sqrt(32), mask=m)], **ATTH),
+    # An additive mask makes emmy keep attention scalar (sdpa or matmul form):
+    # its q @ kt products must still sum unrounded (a matmul kernel).
+    dict(id="x_h_attn_mask", code=f"q = torch.randn(128, 64, {H}); kt = torch.randn(64, 128, {H}); "
+                                  f"v = torch.randn(128, 64, {H}); m = torch.randn(128, 128, {H}); "
+                                  f"torch.softmax(q @ kt / 8.0 + m, dim=-1) @ v",
+         ref=lambda q, kt, m, v: [_attn_h(q, kt, v, 1 / 8, mask=m)], **ATTH),
+    dict(id="x_h_sdpa_mask_odd", code=f"torch.nn.functional.scaled_dot_product_attention(torch.randn(1, 2, 100, 32, {H}), "
+                                      f"torch.randn(1, 2, 120, 32, {H}), torch.randn(1, 2, 120, 32, {H}), "
+                                      f"attn_mask=torch.randn(100, 120, {H}))",
+         ref=lambda q, k, v, m: [_attn_h(q, np.swapaxes(k, -1, -2), v, 1 / np.sqrt(32), mask=m)], **ATTH),
+    # Scores given as an input: each C fragment is read from global memory per
+    # element (FragmentApply's GMEM kind) instead of computed by an mma.
+    dict(id="x_h_softmax_mm", code=f"s = torch.randn(128, 128, {H}); v = torch.randn(128, 64, {H}); "
+                                   f"torch.softmax(s, dim=-1) @ v",
+         ref=lambda s, v: [f16(f64(f16(_softmax(f64(s)))) @ f64(v))], **ATTH),
+    dict(id="x_h_softmax_mm_odd", code=f"s = torch.randn(90, 70, {H}); v = torch.randn(70, 40, {H}); "
+                                       f"torch.softmax(s, dim=-1) @ v",
+         ref=lambda s, v: [f16(f64(f16(_softmax(f64(s)))) @ f64(v))], **ATTH),
+    # Transposed B read straight from global memory, with N under one tile and odd.
+    dict(id="x_h_mm_t_n8", code=f"torch.randn(128, 64, {H}) @ torch.randn(8, 64, {H}).t()",
+         ref=lambda a, b: [_mmh(a, b.T)], **MMH),
+    dict(id="x_h_mm_t_odd", code=f"torch.randn(100, 72, {H}) @ torch.randn(36, 72, {H}).t()",
+         ref=lambda a, b: [_mmh(a, b.T)], **MMH),
     # odd sequence lengths (masked tiles, zero-filled K); the head dim stays a multiple of 16:
     # with 40, emmy's tiling drops k = 32..39 of q @ kt (its own reference kernel too)
     dict(id="x_h_attn_odd", code=f"q = torch.randn(50, 32, {H}); kt = torch.randn(32, 70, {H}); "

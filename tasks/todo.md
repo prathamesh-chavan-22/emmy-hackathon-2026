@@ -1,6 +1,6 @@
 # Status briefing (2026-10-22, deadline Oct 27 23:59 AoE)
 
-## Score: 15/15 open problems pass. 145/145 extra tests pass (33 non-f32 dtype, 26 f16 tensor-core). 43/43 shape sweep pass.
+## Score: 15/15 open problems pass. 154/154 extra tests pass (36 non-f32 dtype, 32 f16 tensor-core). 43/43 shape sweep pass.
 
 ## DONE: f16 tensor cores (stage 5 of dtype support)
 
@@ -9,7 +9,8 @@
       MmaSyncPtx m16n8k16, RegStore (+epilogue, guards), cp.async swizzle B32/B64/B128
 - [x] attention: FragmentApply, FragmentRowReduce, FragmentRepack
 - [x] tests: f16 matmul/bmm/linear/mlp/attention specs, GPU regression
-- [ ] speed: x_h_attn_128 uses 255 registers; x_h_mlp's scalar first matmul is 1 ms (emmy's schedule)
+- [x] review round 5 (Fable + code review): launch bounds, f16 product rounding by op, unroll, cleanups
+- [ ] speed: x_h_mlp's scalar first matmul is 1 ms (emmy's schedule); x_h_softmax_mm_odd 1 ms (1024 threads, 64-reg cap)
 
 
 | cat | problems | status |

@@ -1,0 +1,66 @@
+{
+ "id": "x_h_softmax_mm_odd",
+ "code": "s = torch.randn(90, 70, dtype=torch.float16); v = torch.randn(70, 40, dtype=torch.float16); torch.softmax(s, dim=-1) @ v",
+ "rtol": 0.01,
+ "atol": 0.01,
+ "graph_inputs": [
+  "s",
+  "v"
+ ],
+ "graph_outputs": [
+  "matmul"
+ ],
+ "kernels": [
+  {
+   "node": "matmul",
+   "entry": "k_matmul_softmax_reduce_c1ee07",
+   "arg_order": [
+    "s",
+    "v",
+    "matmul"
+   ],
+   "grid": [
+    2,
+    1,
+    1
+   ],
+   "block": [
+    1024,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "s",
+     "dtype": "f16",
+     "shape": [
+      90,
+      70
+     ],
+     "seed": 0
+    },
+    {
+     "name": "v",
+     "dtype": "f16",
+     "shape": [
+      70,
+      40
+     ],
+     "seed": 1
+    },
+    {
+     "name": "matmul",
+     "dtype": "f16",
+     "shape": [
+      90,
+      40
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

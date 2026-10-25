@@ -45,7 +45,6 @@ ELEM_ROWS = (0, 0, 1, 1)       # C element -> which of the lane's two rows (g, g
 @dataclass
 class Fragment:
     """A family of `count` register arrays (count 1 for a plain fragment)."""
-    kind: str                   # register kind: "b32" packed halves, "f32" accumulator
     members: list[list[str]]
 
 
@@ -67,7 +66,7 @@ def frag(ctx: Context, ref: str) -> list[str]:
 
 
 def _new_frag(ctx: Context, name: str, kind: str, n: int, count: int = 1) -> Fragment:
-    f = Fragment(kind, [[ctx.em.reg(kind) for _ in range(n)] for _ in range(count)])
+    f = Fragment([[ctx.em.reg(kind) for _ in range(n)] for _ in range(count)])
     ctx.frags[name] = f
     return f
 
@@ -116,8 +115,9 @@ def lower_reg_fragment(ctx: Context, s) -> None:
     """Declare a fragment (family): fresh registers; an f32 accumulator starts at 0.
 
     Register counts are the m16n8k16 ones (see the module docstring). Only
-    f16 operands with an f32 accumulator exist on this runner (bf16 and fp8
-    inputs cannot be fed to it), so other shapes or types are rejected.
+    f16 operands with an f32 accumulator are lowered: bf16 and fp8 inputs
+    cannot be fed to this runner, and emmy emits an f16 accumulator only
+    behind an opt-in fast-math flag. Other shapes or types are rejected.
     """
     if tuple(s.shape) != (16, 8, 16):
         raise NotImplementedError(f"mma fragment shape {s.shape}")
@@ -220,14 +220,14 @@ def _gmem_fragment(ctx: Context, s, buf, ldm: int) -> None:
     t2 = _bitop(ctx, "shl.b32", t, 1)
     clamp = k_left = None
     if s.gmem_guard is not None:
-        base, bound = (X.lower(ctx, e) for e in s.gmem_guard)
-        left = X.binary(ctx, "-", X.binary(ctx, "-", bound, base), X.imm(1))
+        tile_base, tile_bound = (X.lower(ctx, e) for e in s.gmem_guard)
+        left = X.binary(ctx, "-", X.binary(ctx, "-", tile_bound, tile_base), X.imm(1))
         clamp = X.imm(max(left.const, 0)) if left.is_imm else Value(em.reg("s32"), "s32")
         if not left.is_imm:
             em.emit(f"max.s32 \t{clamp.text}, {left.text}, 0", "clamp row/col to the live range")
     if s.k_zero is not None:
-        base, bound = (X.lower(ctx, e) for e in s.k_zero)
-        k_left = X.binary(ctx, "-", bound, base)
+        k_base, k_bound = (X.lower(ctx, e) for e in s.k_zero)
+        k_left = X.binary(ctx, "-", k_bound, k_base)
     dyn = flat_index(ctx, buf, s.src_index)
     pick = lambda x: x if clamp is None else _min(ctx, x, clamp)
 
@@ -237,16 +237,16 @@ def _gmem_fragment(ctx: Context, s, buf, ldm: int) -> None:
         rows = [pick(g), pick(X.binary(ctx, "+", g, X.imm(8)))] if clamp is not None else [g, g]
         for i in range(4):
             row, row_c = (rows[i & 1], 0) if clamp is not None else (g, 8 * (i & 1))
-            k = 8 * (i >> 1)
-            halves.append([((row, row_c), (t2, k + j), k + j) for j in (0, 1)])
+            k0 = 8 * (i >> 1)
+            halves.append([((row, row_c), (t2, k0 + j), k0 + j) for j in (0, 1)])
     else:
         n = pick(g)
         for i in range(2):
-            k = 8 * i
+            k0 = 8 * i
             if s.b_trans:
-                halves.append([((n, 0), (t2, k + j), k + j) for j in (0, 1)])
+                halves.append([((n, 0), (t2, k0 + j), k0 + j) for j in (0, 1)])
             else:
-                halves.append([((t2, k + j), (n, 0), k + j) for j in (0, 1)])
+                halves.append([((t2, k0 + j), (n, 0), k0 + j) for j in (0, 1)])
 
     memo = {}
     dt = get(buf.dtype)
@@ -255,22 +255,19 @@ def _gmem_fragment(ctx: Context, s, buf, ldm: int) -> None:
         packed = []
         for (row, row_c), (col, col_c), k in pair:
             key = (row.text, col.text)
-            if key not in memo:
-                memo[key] = X.binary(ctx, "+", dyn[0], X.binary(
-                    ctx, "+", X.binary(ctx, "*", row, X.imm(ldm)), col))
-            addr, off = address(ctx, buf, (memo[key], dyn[1] + row_c * ldm + col_c))
+            if key not in memo:   # one base address per (row, col) register pair
+                memo[key] = address(ctx, buf, (X.binary(ctx, "+", dyn[0], X.binary(
+                    ctx, "+", X.binary(ctx, "*", row, X.imm(ldm)), col)), dyn[1]))
+            addr, off = memo[key]
+            off += (row_c * ldm + col_c) * dt.size
             raw = em.reg(dt.mem)
             ld = f"ld.global.{'b16' if dt.mem == 'f16' else dt.mem} \t{raw}, {operand(addr, off)}"
             if k_left is None:
                 em.emit(ld)
             else:   # in range when 2t + k < k_left
-                p = X.binary(ctx, "<", X.binary(ctx, "+", t2, X.imm(k)), k_left)
+                p = X.binary(ctx, "<", X.binary(ctx, "+", t2, X.imm(k)), k_left)  # t2 is a register
                 em.emit(f"mov.b{bits(dt.mem)} \t{raw}, 0", "k past the bound reads 0")
-                if p.is_imm:
-                    if p.const:
-                        em.emit(ld)
-                else:
-                    em.emit(f"@{p.text} {ld}")
+                em.emit(f"@{p.text} {ld}")
             if dt.mem != "f16":
                 h = em.reg("f16")
                 em.emit(f"cvt.rn.f16.{dt.mem} \t{h}, {raw}")
@@ -347,7 +344,8 @@ def lower_reg_store(ctx: Context, s) -> None:
             values = [value(i) for i in group]
             row, col = coords[group[0]]
             elem = X.binary(ctx, "+", X.binary(ctx, "*", row, X.imm(ldm)), X.binary(ctx, "*", col, X.imm(ldn)))
-            flat = swizzled(ctx, (X.binary(ctx, "+", dyn, elem), const), s.swizzle)
+            # Swizzle is a shared-slab layout; atomics add into global memory (split-K), as in emmy.
+            flat = swizzled(ctx, (X.binary(ctx, "+", dyn, elem), const), "NONE" if s.atomic else s.swizzle)
             store_values(ctx, buf, flat, values, s.atomic)
         if skip:
             em.place(skip)
@@ -431,6 +429,8 @@ def lower_fragment_row_reduce(ctx: Context, s) -> None:
     order), bot those in row g+8. A row's columns are spread over the 4 lanes
     with the same g, which differ in the low two lane bits: a butterfly
     shuffle over masks 2 and 1 gives each of them the whole row's result.
+    The member mask is the full warp (-1): mma.sync itself needs all 32 lanes,
+    so unlike a plain reduction (coop.py) no partial warp can get here.
     """
     if tuple(s.layout.reduce_xors) != (2, 1) or tuple(s.layout.elem_row) != ELEM_ROWS:
         raise NotImplementedError("FragmentRowReduce on a non-m16n8 layout")
