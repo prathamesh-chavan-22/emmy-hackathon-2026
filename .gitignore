@@ -10,3 +10,15 @@ expressions_hidden.py
 
 # shape sweep: 54 MB of generated problems, rebuilt from tests/expressions_sweep.py
 tests/sweep/
+
+# local virtual environments
+.venv/
+venv/
+
+# presentation and video (kept local)
+slides/
+*.mkv
+*.mp4
+
+# scratch PTX dumped at the repo root
+/*.ptx

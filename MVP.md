@@ -26,7 +26,7 @@ Categories 3–5 (matmul, fused, attention-like) are how submissions differentia
 how far up the ladder a compiler gets, how it handles the hidden set, and code quality.
 
 A complete submission is the source code plus a 3 to 5 minute video — see
-[Submitting](README.md#submitting).
+[Submitting](docs/HACKATHON.md#submitting).
 
 Notes:
 

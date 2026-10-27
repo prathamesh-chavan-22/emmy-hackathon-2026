@@ -1,0 +1,4 @@
+# Runtime: compile.py and submit.py
+emmy-ml==0.3.11
+numpy>=2.0
+requests>=2.31

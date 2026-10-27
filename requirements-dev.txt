@@ -1,0 +1,4 @@
+# Generating new test problems (tools/generate.py, tests/expressions_*.py) and scripts/fit_erf.py
+-r requirements.txt
+torch>=2.4
+scipy>=1.11
