@@ -12,7 +12,7 @@ import math
 
 from . import expr as X
 from .context import Context, Value
-from .dtypes import DType, INT_KINDS, common_kind, get, round_to
+from .dtypes import DType, INT_KINDS, cast_const, common_kind, get, round_to
 from .memory import flat_index, load_values, store_values, swizzled
 from .ops import COMPARISONS, SHIFTS, emit_native, emit_op, native, signature
 
@@ -336,7 +336,11 @@ def lower_load(ctx: Context, s) -> None:
     """`a, b, ... = load x[i]`: consecutive elements -> ld.v4/v2 where possible."""
     if s.input in ctx.constants and len(s.names) == 1:
         # A ConstantOp arg: its value is in the IR, so no memory access is needed.
-        ctx.assign(s.names[0], X.const(ctx.constants[s.input], get(ctx.buffers[s.input].dtype)))
+        # It is a Python scalar, which torch keeps at f32 precision even next to an
+        # f16/bf16 tensor (x * 0.1 is f16(float(x) * 0.1f)): converted to the compute
+        # kind, not rounded to the buffer's narrow type. The result rounds on assignment.
+        kind = get(ctx.buffers[s.input].dtype).kind
+        ctx.assign(s.names[0], X.imm(cast_const(ctx.constants[s.input], kind), kind))
         return
     buf = ctx.buffers[s.input]
     values = load_values(ctx, buf, flat_index(ctx, buf, s.index), len(s.names), s.names)

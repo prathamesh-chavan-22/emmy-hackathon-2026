@@ -39,4 +39,7 @@ OPEN += [
     dict(id="x_q_bf16_mm", code="(lambda a, b: (a.to(torch.bfloat16) @ b.to(torch.bfloat16)).float())"
                                 "(torch.randn(64, 64), torch.randn(64, 64))",
          ref=lambda a, b: [(t(a).bfloat16() @ t(b).bfloat16()).float().numpy()], rtol=1e-2, atol=1e-2),
+    # A Python scalar stays f32 in torch even next to a half tensor: f16(float(x) * 0.1f).
+    dict(id="x_q_f16_scalar", code="(torch.randn(4096).half() * 0.1).float()",
+         ref=lambda x: [(t(x).half() * 0.1).float().numpy()], rtol=0, atol=0),
 ]

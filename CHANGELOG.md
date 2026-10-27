@@ -307,3 +307,8 @@ Same schedules emmy chose; better instructions inside them. Measured on the runn
   rounding of the product disappears in emmy's tracing, so that test matches to half a bf16 ulp.
 - Rejected: reusing the rounded bf16 register for the slab store (about 3 instructions per staged
   element in one test kernel; not worth a special path).
+- **Edge-case agent, numeric (with the runner)**: 6M-value emulation of the fp8 PTX sequence and
+  dozens of bit-exact GPU runs held up, except one real break: a scalar in `x.half() * 0.1` was
+  rounded to f16 (0.0999755859375) before the multiply. torch keeps a Python scalar at f32 next to
+  a half/bfloat16 tensor and rounds once. ConstantOp scalars now stay f32; the new test is
+  bit-exact (was 2.4e-4 off). Seven f16 gelu/sdpa kernels changed PTX and still pass, same error.
