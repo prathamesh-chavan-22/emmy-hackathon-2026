@@ -3,6 +3,8 @@
 A compiler from [Emmy](https://github.com/cloudrift-ai/emmy)'s Kernel IR straight to NVIDIA PTX,
 written from scratch in Python for the [Emmy Hackathon 2026](docs/HACKATHON.md).
 
+**Video walkthrough:** https://youtu.be/cH6iQEv01Lg
+
 Emmy normally turns a PyTorch model into CUDA C++ and builds it with `nvcc`. This compiler prints
 the PTX itself, so only `ptxas` is left, which is about 19× faster. That matters because Emmy's
 autotuner builds thousands of kernel variants.
