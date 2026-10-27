@@ -42,4 +42,14 @@ OPEN += [
     # A Python scalar stays f32 in torch even next to a half tensor: f16(float(x) * 0.1f).
     dict(id="x_q_f16_scalar", code="(torch.randn(4096).half() * 0.1).float()",
          ref=lambda x: [(t(x).half() * 0.1).float().numpy()], rtol=0, atol=0),
+    # Matmuls emmy does not put on tensor cores are named after the final cast (k_to_2), so
+    # the kernel name does not say matmul: the operands' indexing does (stmts._contraction).
+    dict(id="x_q_bf16_mm_t", code="(lambda a, b: (a.to(torch.bfloat16) @ b.t().to(torch.bfloat16)).float())"
+                                  "(torch.randn(32, 48), torch.randn(40, 48))",
+         ref=lambda a, b: [(t(a).bfloat16() @ t(b).t().bfloat16()).float().numpy()], rtol=1e-2, atol=1e-2),
+    dict(id="x_q_bf16_mm_odd", code="(lambda a, b: (a.to(torch.bfloat16) @ b.to(torch.bfloat16)).float())"
+                                    "(torch.randn(128, 100), torch.randn(100, 130))",
+         ref=lambda a, b: [(t(a).bfloat16() @ t(b).bfloat16()).float().numpy()], rtol=1e-2, atol=1e-2),
+    dict(id="x_q_f16_mm_t", code="(lambda a, b: (a.half() @ b.t().half()).float())(torch.randn(32, 48), torch.randn(40, 48))",
+         ref=lambda a, b: [(t(a).half() @ t(b).t().half()).float().numpy()], rtol=1e-3, atol=1e-3),
 ]

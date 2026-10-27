@@ -312,3 +312,13 @@ Same schedules emmy chose; better instructions inside them. Measured on the runn
   rounded to f16 (0.0999755859375) before the multiply. torch keeps a Python scalar at f32 next to
   a half/bfloat16 tensor and rounds once. ConstantOp scalars now stay f32; the new test is
   bit-exact (was 2.4e-4 off). Seven f16 gelu/sdpa kernels changed PTX and still pass, same error.
+- **Edge-case agent, shapes (with the runner)**: about 95 matmul / reduction / attention / split-K
+  shapes in bf16, f16 and fp8. Every IR emmy emitted compiled and ran; tensor-core bf16 at
+  1x1x1, 17x33x47, transposed, batched and from f16 buffers was exact. One real break: a bf16
+  matmul emmy keeps off the tensor cores (transposed or odd shapes) is a kernel named after the
+  final cast (`k_to_2`), so our matmul-by-name rule missed it and every product was rounded to
+  bf16 (0.13-0.25 off). The kernel name cannot tell, but the indexing can: in `x[i, k] * y[j, k]`
+  each operand uses an output variable the other lacks, while `(a * b).sum()` shares one index and
+  `x * w` broadcasts one side. Such products are now kept exact - not rounded at all, so a masked
+  tail step sums them exactly too (before, only the fma'd main step skipped the rounding). The
+  three new tests are bit-exact or 5e-7; `x_l_swiglu_h` went from 0.25 to 0.125.

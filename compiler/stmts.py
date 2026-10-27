@@ -9,6 +9,7 @@ Address math and vector loads/stores live in memory.py.
 from __future__ import annotations
 
 import math
+import re
 
 from . import expr as X
 from .context import Context, Value
@@ -344,8 +345,10 @@ def lower_load(ctx: Context, s) -> None:
         return
     buf = ctx.buffers[s.input]
     values = load_values(ctx, buf, flat_index(ctx, buf, s.index), len(s.names), s.names)
+    used = frozenset(re.findall(r"Var\(name='([^']+)'\)", repr(s.index)))
     for name, v in zip(s.names, values):
         ctx.assign(name, v)
+        ctx.index_vars[name] = used
 
 
 @handles("Write")
@@ -405,16 +408,25 @@ def compute(ctx: Context, op: str, names, dt) -> Value:
     dst = em.reg(out_kind)
     emit_op(em, op, dst, args, consts)
     result = X.convert(ctx, Value(dst, out_kind), kind)
-    if dtype is not None and dtype.rounds:
-        rounded = Value(round_to(em, result.text, dtype), kind)
-        if op == "multiply" and ctx.exact_f16_products:
-            # In a matmul torch keeps the f16 product exact, so an Accum that
-            # sums it reads the operands into its fma, skipping this rounding.
-            ctx.products[rounded.text] = (args[0], args[1])
-        return rounded
+    exact = op == "multiply" and (ctx.exact_f16_products or _contraction(ctx, names))
+    if dtype is not None and dtype.rounds and not exact:
+        return Value(round_to(em, result.text, dtype), kind)
+    # In a matmul torch keeps an f16/bf16 product exact, so it is not rounded at all:
+    # the Accum reads its operands into an fma, and a masked tail step sums it as is.
     if op == "multiply" and result.text == dst:
         ctx.products[dst] = (args[0], args[1])
     return result
+
+
+def _contraction(ctx: Context, names) -> bool:
+    """Is `a * b` a matmul step by its indexing? The kernel name says matmul only when the
+    matmul is the last op: `(a @ b).float()` is named after the cast. An outer-product
+    pattern (each operand indexed by an output variable the other lacks) still shows
+    it, while `(a * b).sum()` reads both at the same index and `x * w` broadcasts one."""
+    if len(names) != 2:
+        return False
+    a, b = (ctx.index_vars.get(n) for n in names)
+    return bool(a and b and a - b and b - a)
 
 
 @handles("Assign")
@@ -422,6 +434,8 @@ def lower_assign(ctx: Context, s) -> None:
     """`name = op(args)`: one elementwise op, typed by the IR's dtype (see compute).
     The combine programs inside WarpShuffle/TreeHalve leave dtype unset: f32."""
     ctx.assign(s.name, compute(ctx, s.op.name, s.args, s.dtype))
+    if s.op.name == "copy" and len(s.args) == 1 and s.args[0] in ctx.index_vars:
+        ctx.index_vars[s.name] = ctx.index_vars[s.args[0]]   # `bf16 v0 = copy(in0)`
 
 
 @handles("Accum")

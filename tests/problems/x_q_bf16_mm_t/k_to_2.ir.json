@@ -1,0 +1,50 @@
+{
+  "inputs": [
+    "to_2__partial"
+  ],
+  "outputs": [
+    "to_2"
+  ],
+  "nodes": {
+    "to_2__partial": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "to_2__partial",
+          "shape": [
+            4,
+            32,
+            40
+          ],
+          "dtype": "f32"
+        }
+      ]
+    },
+    "to_2": {
+      "op": "KernelOp",
+      "op_fields": {
+        "body": [
+          "Tile(axes=(Axis(name='a0', extent=Dim(32), window=None), Axis(name='a1', extent=Dim(40), window=None)), body=(Loop(axis=Axis(name='_a2_ks', extent=Dim(4), window=Window(parent=Axis(name='_a2_ks', extent=Dim(4), window=None), base=None, bound=None, partition=True)), body=(Load(names=('acc0__p',), input='to_2__partial', index=(Var(name='_a2_ks'), Var(name='a0'), Var(name='a1')), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0', value='acc0__p', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('_a2_ks',), base=None)), unroll=False, seed=True), Assign(name='v3', op=ElementwiseImpl('copy'), args=('acc0',), dtype=DataType(name='bf16', np=dtype('uint16'), nbytes=2)), Write(output='to_2', index=(Var(name='a0'), Var(name='a1')), values=('v3',), value_dtype=DataType(name='bf16', np=dtype('uint16'), nbytes=2), atomic=False, swizzle='NONE')), block_threads=None, aux_threads=0, raster_axes=None, raster_group=None, raster_orient='m')"
+        ],
+        "name": "k_to_2",
+        "zero_delegated": [],
+        "serial": []
+      },
+      "inputs": [
+        "to_2__partial"
+      ],
+      "outputs": [
+        {
+          "name": "to_2",
+          "shape": [
+            32,
+            40
+          ],
+          "dtype": "f32"
+        }
+      ]
+    }
+  }
+}

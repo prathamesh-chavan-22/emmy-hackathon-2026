@@ -57,6 +57,10 @@ class Context:
     # Whether an f16 product summed in f32 stays exact (a matmul) or is rounded
     # to half first (an elementwise multiply): see matmul_kernel in __init__.py.
     exact_f16_products: bool = False
+    # Loaded names (and their copies) -> the index variables of their address.
+    # A product whose operands each use a variable the other lacks (x[i, k] *
+    # y[j, k]) is a contraction - a matmul under another name - also kept exact.
+    index_vars: dict[str, frozenset] = field(default_factory=dict)
     # Dynamic shared memory pool (meta smem_bytes > 0): its size and the next free byte.
     smem_pool: int = 0
     smem_used: int = 0

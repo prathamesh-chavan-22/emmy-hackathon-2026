@@ -1,0 +1,21 @@
+    Tile[_a2_ks, a0, a1, a2_co] (N=163840)
+        for a2 in a2_co..12:64
+            in0 = load x0[a0, ((_a2_ks * 12) + a2)]
+            bf16 v0 = copy(in0)
+            in1 = load x1[a1, ((_a2_ks * 12) + a2)]
+            bf16 v1 = copy(in1)
+            bf16 v2 = multiply(v0, v1)
+            f32 acc0 <- add(acc0, v2)
+            in0__r1 = load x0[a0, ((_a2_ks * 12) + ((a2 + 32) % 12))]
+            bf16 v0__r1 = copy(in0__r1)
+            in1__r1 = load x1[a1, ((_a2_ks * 12) + ((a2 + 32) % 12))]
+            bf16 v1__r1 = copy(in1__r1)
+            bf16 v2__r1 = multiply(v0__r1, v1__r1)
+            Init(f32 v2__r1__id = 0.0)
+            v2__r1__m = v2__r1 when (((a2 + 32) < 12))
+                        v2__r1__id when (1)
+            f32 acc0__r1 <- add(acc0__r1, v2__r1__m)
+        f32 acc0 <- add(acc0, acc0__r1)
+        WarpShuffle(acc0, length=32)
+        if ((a2_co == 0)):
+            to_2__partial[_a2_ks, a0, a1] = acc0

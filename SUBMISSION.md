@@ -12,7 +12,7 @@ development log, with the bugs we found and the measurements, is [CHANGELOG.md](
 | set | what | pass |
 |---|---|---|
 | open problems | the 15 in `problems/` (all 5 categories) | 15/15 |
-| extra tests | 172 of our own, generated like the hidden set (`tests/expressions_extra.py`, `_llm.py`, `_quant.py`) | 172/172 |
+| extra tests | 175 of our own, generated like the hidden set (`tests/expressions_extra.py`, `_llm.py`, `_quant.py`) | 175/175 |
 | shape sweep | 43 hidden-set-like sizes (`tests/expressions_sweep.py`) | 43/43 |
 
 These were all run on the hosted RTX 5090 runner through `submit.py --compiler`.
@@ -107,4 +107,5 @@ Every lowering function has a docstring explaining *why* it lowers the way it do
 - torch 2.14 saturates e4m3fn overflow to +-448 (even inf); the runner returns inf as JSON null,
   so a kernel producing inf cannot pass there.
 - An f16 `(a*b).sum()` and an f16 vector matmul produce identical IR but differ in torch's
-  rounding. Only the kernel name tells them apart.
+  rounding. The kernel name tells them apart, except when a cast follows the matmul (`k_to_2`):
+  then the operands' indexing (x[i,k] * y[j,k]) identifies the contraction.
