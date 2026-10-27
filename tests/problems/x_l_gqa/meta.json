@@ -1,0 +1,96 @@
+{
+ "id": "x_l_gqa",
+ "code": "(lambda q, k, v: torch.nn.functional.scaled_dot_product_attention(q, k.repeat_interleave(4, dim=1), v.repeat_interleave(4, dim=1)))(torch.randn(1, 8, 64, 32), torch.randn(1, 2, 64, 32), torch.randn(1, 2, 64, 32))",
+ "rtol": 0.001,
+ "atol": 0.001,
+ "graph_inputs": [
+  "x0",
+  "x1",
+  "x2"
+ ],
+ "graph_outputs": [
+  "scaled_dot_product_attention"
+ ],
+ "kernels": [
+  {
+   "node": "scaled_dot_product_attention",
+   "entry": "k_sdpa_9d6e20",
+   "arg_order": [
+    "scaled_dot_product_attention_scale",
+    "x0",
+    "x1",
+    "x2",
+    "scaled_dot_product_attention"
+   ],
+   "grid": [
+    32,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "scaled_dot_product_attention_scale",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.17677669529663687
+     ]
+    },
+    {
+     "name": "x0",
+     "dtype": "f32",
+     "shape": [
+      1,
+      8,
+      64,
+      32
+     ],
+     "seed": 0
+    },
+    {
+     "name": "x1",
+     "dtype": "f32",
+     "shape": [
+      1,
+      2,
+      64,
+      32
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x2",
+     "dtype": "f32",
+     "shape": [
+      1,
+      2,
+      64,
+      32
+     ],
+     "seed": 2
+    },
+    {
+     "name": "scaled_dot_product_attention",
+     "dtype": "f32",
+     "shape": [
+      1,
+      8,
+      64,
+      32
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

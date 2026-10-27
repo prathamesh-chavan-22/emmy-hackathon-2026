@@ -174,3 +174,54 @@ a01 218->171, a02 100->54, r02 39->31. 100/100 still pass. See CHANGELOG.
 Review round 4 + shape sweep (2026-10-23): see CHANGELOG. Exact .rn rounding for elementwise,
 explicit fma.rn for Accum. Sweep: `py tests/run_all.py --sweep` (regenerate tests/sweep first).
 Runner rejects inputs of 8M+ elements (HTTP 422).
+
+## Video deck (2026-10-26)
+
+Science deck: 12 slides, no welcome slide. Each slide has a formula, What/Why/How, and an SVG in
+three steps (before -> change -> after). Only two colors: ink + one accent, on white.
+Output: `slides/emmy_ptx_compiler.pptx` + `slides/svg/*.svg`.
+
+- [x] 1 IR -> PTX (19x)   - [x] 2 syntax-directed translation   - [x] 3 thread map + guard
+- [x] 4 affine folding    - [x] 5 butterfly reduction           - [x] 6 cp.async 3-stage, 72 KB
+- [x] 7 mma lane map      - [x] 8 XOR swizzle                   - [x] 9 softmax row max
+- [x] 10 fp rounding / same IR two meanings  - [x] 11 .maxntid    - [x] 12 results + real run
+- [x] QA: validate.py, render through PowerPoint, check every slide
+
+Review: 12 slides built, validate.py passes, every slide rendered through PowerPoint and checked
+(no clipping or overflow). Slide 12 terminal lines are real runner output from 2026-10-26.
+
+## Video preview (2026-10-26)
+- [x] Add slide 12 "Tech stack" and slide 13 "Built with Claude Code" (results moved to slide 14)
+- [x] Build as slides/emmy_ptx_compiler_v2.pptx (the original was open in PowerPoint); validate.py passes
+- [x] Narrate speaker notes with Windows TTS, render with ffmpeg: slides/preview_video.mp4, 1080p, 4:32
+- Review: preview only. The voice is the Windows TTS voice; slide 14 narration replaces the stage-direction notes.
+
+## Code + slides video (2026-10-26)
+- [x] CODE reference (file:line · function) on every formula slide; filled ▶ CODE chip on the 5 switch slides (1, 3, 8, 10, 14)
+- [x] Speaker notes on switch slides start with [SWITCH TO CODE] steps … [BACK TO SLIDES]
+- [x] Built to slides/emmy_ptx_compiler_v2.pptx (original still open in PowerPoint); validate.py passes; slides 3, 9, 14 rendered and checked
+
+## Deck in the user's order + script (2026-10-26)
+- [x] Order: greeting → hackathon → goal → statement lowering → memory → reduction → tensor cores → results → stack → Claude Code
+- [x] New slides: title (greeting), "The goal" (contract, 5-category ladder, judging order from README)
+- [x] Indices, rounding, launch bounds moved to hidden backup slides 14-16
+- [x] slides/video_script.md generated from the same data as the speaker notes; ~551 words, 4:48 with pauses and 4 code switches
+- [x] validate.py passes; all slides rendered and checked
+
+## Low-precision types (2026-10-27)
+
+Probe (tests/expressions_quant.py): emmy has no int8; fp4 is storage-only (u8 carrier, no torch cast);
+int4 = i32 shifts/masks (already compiles). Reachable: bf16 and fp8 (e4m3/e5m2) as in-kernel values,
+and **bf16 tensor cores** (`a.to(bf16) @ b.to(bf16)` with f32 buffers).
+
+- [x] dtypes.py: bf16, f8e4m3, f8e5m2 compute in f32, round on assign (sm_89 cvt; torch overflow rules)
+- [x] memory/emitter/coop: bf16 (and fp8) shared slabs: b16/b8 ld/st, C type names
+- [x] mma.py: bf16 fragments, mma .bf16, gmem-direct cvt to bf16, repack bf16x2
+- [x] tests: quant + llm specs pass on GPU; full regression; PTX of old tests unchanged
+- [x] CHANGELOG + SUBMISSION.md
+
+### Review (2026-10-27)
+- fp8 hardware cvt rejected by the runner (needs PTX 8.1 / sm_90): replaced with f32 magic-constant rounding.
+- torch 2.14 saturates e4m3fn (not NaN); runner returns inf as null (e5m2 test clamps).
+- fp8 stays register-only (no fp8 buffers/slabs reachable from torch); fp8 mma needs sm_120.
+- 15/15 open, 172/172 extra, 43/43 sweep; PTX of 180 earlier tests byte-identical.

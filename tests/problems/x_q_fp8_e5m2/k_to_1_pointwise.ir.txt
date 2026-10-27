@@ -1,0 +1,7 @@
+    Tile[a0] (N=1024)
+        in0__u0, in0__u1, in0__u2, in0__u3 = load x[((a0 * 4) + 0)]
+        f8e5m2 v0__u0 = copy(in0__u0)
+        f8e5m2 v0__u1 = copy(in0__u1)
+        f8e5m2 v0__u2 = copy(in0__u2)
+        f8e5m2 v0__u3 = copy(in0__u3)
+        to_1[((a0 * 4) + 0)] = (v0__u0, v0__u1, v0__u2, v0__u3)

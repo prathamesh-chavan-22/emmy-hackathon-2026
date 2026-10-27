@@ -1,0 +1,66 @@
+{
+ "id": "x_q_bf16_mm",
+ "code": "(lambda a, b: (a.to(torch.bfloat16) @ b.to(torch.bfloat16)).float())(torch.randn(64, 64), torch.randn(64, 64))",
+ "rtol": 0.01,
+ "atol": 0.01,
+ "graph_inputs": [
+  "x0",
+  "x1"
+ ],
+ "graph_outputs": [
+  "to_2"
+ ],
+ "kernels": [
+  {
+   "node": "to_2",
+   "entry": "k_matmul_9c8e5f",
+   "arg_order": [
+    "x1",
+    "x0",
+    "to_2"
+   ],
+   "grid": [
+    8,
+    1,
+    1
+   ],
+   "block": [
+    32,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "x1",
+     "dtype": "f32",
+     "shape": [
+      64,
+      64
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x0",
+     "dtype": "f32",
+     "shape": [
+      64,
+      64
+     ],
+     "seed": 0
+    },
+    {
+     "name": "to_2",
+     "dtype": "f32",
+     "shape": [
+      64,
+      64
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

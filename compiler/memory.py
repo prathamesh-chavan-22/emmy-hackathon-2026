@@ -115,8 +115,10 @@ def address(ctx: Context, buf: Buffer, flat: Offset) -> tuple[str, int]:
 
 
 def _ptx_type(mem: str) -> str:
-    """ld/st spell a half as raw .b16 bits; the cvt next to it gives them meaning."""
-    return "b16" if mem == "f16" else mem
+    """ld/st spell a 16-bit float as raw .b16 bits; the cvt next to it gives them meaning."""
+    if mem in ("e4m3", "e5m2"):
+        raise NotImplementedError(f"{mem} in memory (only in registers so far)")
+    return "b16" if mem in ("f16", "bf16") else mem
 
 
 def operand(base: str, offset: int) -> str:

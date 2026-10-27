@@ -1,0 +1,77 @@
+{
+ "id": "x_l_rope",
+ "code": "(lambda x, c, s: x * c + torch.cat((-x[:, 32:], x[:, :32]), -1) * s)(torch.randn(128, 64), torch.randn(128, 64), torch.randn(128, 64))",
+ "rtol": 0.0001,
+ "atol": 0.0001,
+ "graph_inputs": [
+  "x0",
+  "x1",
+  "x2"
+ ],
+ "graph_outputs": [
+  "add"
+ ],
+ "kernels": [
+  {
+   "node": "add",
+   "entry": "k_cat_slice_pointwise_d6f9b3",
+   "arg_order": [
+    "x0",
+    "x1",
+    "x2",
+    "add"
+   ],
+   "grid": [
+    8,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "x0",
+     "dtype": "f32",
+     "shape": [
+      128,
+      64
+     ],
+     "seed": 0
+    },
+    {
+     "name": "x1",
+     "dtype": "f32",
+     "shape": [
+      128,
+      64
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x2",
+     "dtype": "f32",
+     "shape": [
+      128,
+      64
+     ],
+     "seed": 2
+    },
+    {
+     "name": "add",
+     "dtype": "f32",
+     "shape": [
+      128,
+      64
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

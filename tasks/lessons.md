@@ -25,3 +25,10 @@
 - **Mirror every launch hint the reference CUDA carries.** emmy's `__launch_bounds__(block)` caps nvcc's
   registers; PTX without `.maxntid` let ptxas use 255 and a 1024-thread block could not launch. A test
   that runs at our usual 128-256 threads never shows it - include a large-block shape.
+
+- **Check a new PTX instruction against the fixed header before relying on it.** The fp8 cvt
+  (e4m3x2) needs `.version 8.1` on sm_89; our contract pins 8.0, and only the runner's ptxas said so.
+  Rule: for every new instruction, look up its PTX ISA / target minimum in the spec first.
+- **Measure torch's semantics, never recall them.** I encoded "e4m3fn overflow -> NaN"; torch 2.14
+  saturates to 448. Rule: simulate the lowering in numpy against torch on edge values (ties,
+  subnormals, max, inf, nan) before the GPU run. Also: the runner returns inf as null.

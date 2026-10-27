@@ -1,0 +1,40 @@
+extern "C" __global__
+__launch_bounds__(256) void k_cat_slice_pointwise_d6f9b3(const float* x0, const float* x1, const float* x2, float* add) {
+    int _gid = blockIdx.x * blockDim.x + threadIdx.x;
+        int a0 = _gid / 16;
+        int a1 = (_gid) % 16;
+        float in0__u0 = x0[a0 * 64 + (32 + ((a1 * 4 < 32) ? (a1 * 4) : (0)))];
+        float v0__u0 = 0.0f - in0__u0;
+        float in2__u0 = x0[a0 * 64 + a1 * 4];
+        float in3__u0 = x1[a0 * 64 + a1 * 4];
+        float in1__u0 = x0[a0 * 64 + ((a1 * 4 < 32) ? (0) : (a1 * 4 + -32))];
+        float v2__u0 = ((a1 * 4 + 0 < 32) ? (((float)(v0__u0))) : (((float)(in1__u0))));
+        float in4__u0 = x2[a0 * 64 + a1 * 4];
+        float v4__u0 = (in2__u0 * in3__u0) + (in4__u0 * v2__u0);
+        float in0__u1 = x0[a0 * 64 + (32 + ((a1 * 4 + 1 < 32) ? (a1 * 4 + 1) : (0)))];
+        float v0__u1 = 0.0f - in0__u1;
+        float in2__u1 = x0[a0 * 64 + (a1 * 4 + 1)];
+        float in3__u1 = x1[a0 * 64 + (a1 * 4 + 1)];
+        float in1__u1 = x0[a0 * 64 + ((a1 * 4 + 1 < 32) ? (0) : (a1 * 4 + 1 + -32))];
+        float v2__u1 = ((a1 * 4 + 1 < 32) ? (((float)(v0__u1))) : (((float)(in1__u1))));
+        float in4__u1 = x2[a0 * 64 + (a1 * 4 + 1)];
+        float v4__u1 = (in2__u1 * in3__u1) + (in4__u1 * v2__u1);
+        float in0__u2 = x0[a0 * 64 + (32 + ((a1 * 4 + 2 < 32) ? (a1 * 4 + 2) : (0)))];
+        float v0__u2 = 0.0f - in0__u2;
+        float in2__u2 = x0[a0 * 64 + (a1 * 4 + 2)];
+        float in3__u2 = x1[a0 * 64 + (a1 * 4 + 2)];
+        float in1__u2 = x0[a0 * 64 + ((a1 * 4 + 2 < 32) ? (0) : (a1 * 4 + 2 + -32))];
+        float v2__u2 = ((a1 * 4 + 2 < 32) ? (((float)(v0__u2))) : (((float)(in1__u2))));
+        float in4__u2 = x2[a0 * 64 + (a1 * 4 + 2)];
+        float v4__u2 = (in2__u2 * in3__u2) + (in4__u2 * v2__u2);
+        float in0__u3 = x0[a0 * 64 + (32 + ((a1 * 4 + 3 < 32) ? (a1 * 4 + 3) : (0)))];
+        float v0__u3 = 0.0f - in0__u3;
+        float in2__u3 = x0[a0 * 64 + (a1 * 4 + 3)];
+        float in3__u3 = x1[a0 * 64 + (a1 * 4 + 3)];
+        float in1__u3 = x0[a0 * 64 + ((a1 * 4 + 3 < 32) ? (0) : (a1 * 4 + 3 + -32))];
+        float v2__u3 = ((a1 * 4 + 3 < 32) ? (((float)(v0__u3))) : (((float)(in1__u3))));
+        float in4__u3 = x2[a0 * 64 + (a1 * 4 + 3)];
+        float v4__u3 = (in2__u3 * in3__u3) + (in4__u3 * v2__u3);
+        float4 _vs_v4__u0_e98b5e26 = make_float4(v4__u0, v4__u1, v4__u2, v4__u3);
+        *reinterpret_cast<float4*>(&add[a0 * 64 + a1 * 4]) = _vs_v4__u0_e98b5e26;
+}

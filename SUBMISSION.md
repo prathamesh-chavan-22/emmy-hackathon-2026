@@ -12,7 +12,7 @@ development log, with the bugs we found and the measurements, is [CHANGELOG.md](
 | set | what | pass |
 |---|---|---|
 | open problems | the 15 in `problems/` (all 5 categories) | 15/15 |
-| extra tests | 154 of our own, generated like the hidden set (`tests/expressions_extra.py`) | 154/154 |
+| extra tests | 172 of our own, generated like the hidden set (`tests/expressions_extra.py`, `_llm.py`, `_quant.py`) | 172/172 |
 | shape sweep | 43 hidden-set-like sizes (`tests/expressions_sweep.py`) | 43/43 |
 
 These were all run on the hosted RTX 5090 runner through `submit.py --compiler`.
@@ -26,12 +26,23 @@ These were all run on the hosted RTX 5090 runner through `submit.py --compiler`.
 - **Matmul:** `cp.async` multi-stage pipelines, dynamic shared-memory pool above 48 KB.
 - **Fused:** layernorm, rmsnorm, softmax, log-softmax.
 - **Attention:** online-softmax attention, sdpa, causal and masked.
+- **Modern-LLM blocks** (tests): Mamba-2 SSM decay and scan, causal linear attention, SwiGLU,
+  RoPE, weighted RMSNorm, logit softcapping, grouped-query attention.
 
 **Data types:** f32, f16, f64, i32 and i64, with torch's semantics where emmy's C and torch
 disagree (integer division, f16 rounding of intermediates, bool <-> float masks).
 
-**Tensor cores (f16):**
-- `mma.sync.m16n8k16` with an f32 accumulator.
+**Low precision** (inside kernels; the runner allocates only f32/f16/f64/i32/i64 buffers):
+- bf16 values, rounded on every assignment (`cvt.rn.bf16.f32`), bit-exact against torch.
+- fp8 e4m3 and e5m2, bit-exact with torch's rounding, subnormals and overflow rules (e4m3fn
+  saturates, e5m2 goes to inf). The hardware cvt needs PTX 8.1, so we round in plain f32 with a
+  magic-constant add that makes `add.rn` round at the fp8 step.
+- int4 dequantization from packed i32 words.
+- int8 and fp4 are not reachable: emmy 0.3.11 has no int8 dtype, and its fp4 has no torch cast.
+
+**Tensor cores (f16 and bf16):**
+- `mma.sync.m16n8k16` with an f32 accumulator, f16 or bf16 operands
+  (`a.to(torch.bfloat16) @ b.to(torch.bfloat16)` runs on bf16 tensor cores).
 - Five `ldmatrix` variants (x4, x2, transposed, paired), plus fragments read straight from global
   memory, with edge clamping and zero-filled K.
 - Swizzled shared memory (B32/B64/B128) for both the cp.async fill and the ldmatrix drain.
@@ -58,7 +69,7 @@ Measured: the 512 matmul went from 114 to 78 us, and the 128-token attention fro
 **Robustness:**
 - Always a bounds guard.
 - Pure-ASCII output, checked at emit time.
-- Clear errors for constructs emmy can emit but the runner cannot feed (bf16, fp8).
+- Clear errors for constructs emmy can emit but we do not lower (fp8 in memory, fp8 mma).
 
 ## Layout
 
@@ -91,5 +102,7 @@ Every lowering function has a docstring explaining *why* it lowers the way it do
   Its own reference kernel has the same error.
 - Many torch ops (ceil, sign, leaky_relu, log_softmax, ...) do not trace through emmy 0.3.11, so the
   hidden set cannot contain them.
+- torch 2.14 saturates e4m3fn overflow to +-448 (even inf); the runner returns inf as JSON null,
+  so a kernel producing inf cannot pass there.
 - An f16 `(a*b).sum()` and an f16 vector matmul produce identical IR but differ in torch's
   rounding. Only the kernel name tells them apart.

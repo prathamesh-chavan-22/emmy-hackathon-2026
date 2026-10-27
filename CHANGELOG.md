@@ -259,3 +259,31 @@ Same schedules emmy chose; better instructions inside them. Measured on the runn
 - Rejected review findings (with reasons in the code): reading the matmul origin from the IR (it is
   not there - the KernelOp has only body/name), and swizzle keyed on memory space (emmy keys it on
   atomic).
+
+## 2026-10-27 - low precision (bf16 tensor cores, fp8, int4) and modern-LLM blocks (15/15 open, 172/172 extra, 43/43 sweep)
+
+- **What emmy can express**, probed from torch: no int8 at all (tracing `.to(torch.int8)` fails),
+  fp4 (`f4e2m1x2`) only as a storage type with no torch cast to reach it, int4 as shifts and masks
+  on i32 words (already compiled). Reachable and new: **bf16 and fp8 (e4m3, e5m2) values inside a
+  kernel**, and a **bf16 tensor-core matmul**: `a.to(bf16) @ b.to(bf16)` on f32 buffers becomes a
+  kernel that rounds to bf16 into a swizzled shared slab and runs `mma.sync ... .bf16.bf16.f32`.
+- **bf16**: computes in f32 like f16 and rounds on every assignment (`cvt.rn.bf16.f32`). Widening
+  back is a 16-bit shift, since `cvt.f32.bf16` needs sm_90. Constants are rounded at compile time
+  by the same rule.
+- **bf16 tensor cores**: a fragment now remembers its element type (ldmatrix/global loads carry
+  none), so the global-memory path converts to bf16, the register repack uses `cvt.rn.bf16x2.f32`,
+  and the mma suffix follows the operand type. Everything else (ldmatrix variants, swizzle, epilogues)
+  is shared with f16.
+- **fp8 without the hardware cvt**: `cvt...e4m3x2.f32` needs PTX 8.1 (or sm_90), and our target is
+  fixed at 8.0 / sm_89 - the runner's ptxas refused it. So we round in plain f32: with
+  `C = 2^(e+23-m)` for |x| in [2^e, 2^(e+1)), `|x| + C` lands where the f32 step *is* the fp8 step, so
+  `add.rn` rounds to nearest-even for us and `- C` is exact. Six instructions, checked against
+  torch on 6 million values including every tie, subnormal and infinity before going to the GPU.
+- **We were wrong about torch's overflow**: e4m3fn has no infinity, and we assumed NaN. torch 2.14
+  *saturates* (even inf -> 448). e5m2 goes to inf. The overflow select now follows that.
+- **Runner trap**: infinities come back from the runner's JSON as `null`, so an inf-producing test
+  can never pass. The e5m2 overflow test clamps after the cast; our values were already right.
+- **Modern-LLM blocks** (tests/expressions_llm.py), all passing without compiler changes: Mamba-2
+  SSM decay and scan (matrix form), causal linear attention, SwiGLU (f32 and f16 tensor cores),
+  RoPE, weighted RMSNorm, logit softcapping, grouped-query attention.
+- PTX of all 180 earlier tests is byte-identical to the previous commit.

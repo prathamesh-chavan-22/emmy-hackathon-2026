@@ -1,0 +1,88 @@
+{
+ "id": "x_l_swiglu",
+ "code": "(lambda x, w1, w3: torch.nn.functional.silu(x @ w1) * (x @ w3))(torch.randn(64, 128), torch.randn(128, 256), torch.randn(128, 256))",
+ "rtol": 0.001,
+ "atol": 0.001,
+ "graph_inputs": [
+  "x0",
+  "x1",
+  "x2"
+ ],
+ "graph_outputs": [
+  "mul"
+ ],
+ "kernels": [
+  {
+   "node": "mul",
+   "entry": "k_matmul_reduce_280581",
+   "arg_order": [
+    "silu_one",
+    "x1",
+    "x0",
+    "x2",
+    "mul"
+   ],
+   "grid": [
+    16384,
+    1,
+    1
+   ],
+   "block": [
+    128,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "silu_one",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      1.0
+     ]
+    },
+    {
+     "name": "x1",
+     "dtype": "f32",
+     "shape": [
+      128,
+      256
+     ],
+     "seed": 1
+    },
+    {
+     "name": "x0",
+     "dtype": "f32",
+     "shape": [
+      64,
+      128
+     ],
+     "seed": 0
+    },
+    {
+     "name": "x2",
+     "dtype": "f32",
+     "shape": [
+      128,
+      256
+     ],
+     "seed": 2
+    },
+    {
+     "name": "mul",
+     "dtype": "f32",
+     "shape": [
+      64,
+      256
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

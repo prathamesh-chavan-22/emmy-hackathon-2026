@@ -1,7 +1,8 @@
-"""Tensor-core statements: mma.sync m16n8k16 (f16 x f16 -> f32) and its register fragments.
+"""Tensor-core statements: mma.sync m16n8k16 (f16 or bf16 operands -> f32) and its register fragments.
 
 emmy lowers an f16 matmul (and attention's two matmuls) to warp-wide tensor
-core tiles. Each lane of the warp holds a slice of every operand tile in
+core tiles, and a bf16 one too (`a.to(torch.bfloat16) @ b.to(torch.bfloat16)`
+on f32 buffers: the slab and the operand fragments are bf16, the accumulator f32). Each lane of the warp holds a slice of every operand tile in
 registers - a *fragment* - laid out the way the PTX `mma.sync.m16n8k16` spec
 fixes it:
 
@@ -44,8 +45,13 @@ ELEM_ROWS = (0, 0, 1, 1)       # C element -> which of the lane's two rows (g, g
 
 @dataclass
 class Fragment:
-    """A family of `count` register arrays (count 1 for a plain fragment)."""
+    """A family of `count` register arrays (count 1 for a plain fragment).
+
+    dtype is the element type ("f16", "bf16" or "f32"): the loads that fill an
+    operand fragment carry no type of their own, so they convert to this one.
+    """
     members: list[list[str]]
+    dtype: str = "f32"
 
 
 def frag(ctx: Context, ref: str) -> list[str]:
@@ -65,8 +71,8 @@ def frag(ctx: Context, ref: str) -> list[str]:
     return family.members[i]
 
 
-def _new_frag(ctx: Context, name: str, kind: str, n: int, count: int = 1) -> Fragment:
-    f = Fragment([[ctx.em.reg(kind) for _ in range(n)] for _ in range(count)])
+def _new_frag(ctx: Context, name: str, kind: str, n: int, count: int = 1, dtype: str = "f32") -> Fragment:
+    f = Fragment([[ctx.em.reg(kind) for _ in range(n)] for _ in range(count)], dtype)
     ctx.frags[name] = f
     return f
 
@@ -114,17 +120,17 @@ def _min(ctx: Context, a: Value, b: Value) -> Value:
 def lower_reg_fragment(ctx: Context, s) -> None:
     """Declare a fragment (family): fresh registers; an f32 accumulator starts at 0.
 
-    Register counts are the m16n8k16 ones (see the module docstring). Only
-    f16 operands with an f32 accumulator are lowered: bf16 and fp8 inputs
-    cannot be fed to this runner, and emmy emits an f16 accumulator only
-    behind an opt-in fast-math flag. Other shapes or types are rejected.
+    Register counts are the m16n8k16 ones (see the module docstring); bf16
+    packs two per .b32 exactly like f16. Only an f32 accumulator is lowered:
+    emmy emits an f16 one only behind an opt-in fast-math flag. Other shapes
+    or types (fp8 mma needs sm_120, not the sm_89 target) are rejected.
     """
     if tuple(s.shape) != (16, 8, 16):
         raise NotImplementedError(f"mma fragment shape {s.shape}")
     dtype = getattr(s.dtype, "name", str(s.dtype))
     count = int(s.count)
-    if s.role in ("a", "b") and dtype == "f16":
-        _new_frag(ctx, s.name, "b32", 4 if s.role == "a" else 2, count)
+    if s.role in ("a", "b") and dtype in ("f16", "bf16"):
+        _new_frag(ctx, s.name, "b32", 4 if s.role == "a" else 2, count, dtype)
     elif s.role == "c" and dtype == "f32":
         f = _new_frag(ctx, s.name, "f32", 4, count)
         for regs in f.members:
@@ -138,13 +144,15 @@ def lower_reg_fragment(ctx: Context, s) -> None:
 def lower_mma_sync(ctx: Context, s) -> None:
     """c += a @ b for one 16x8 tile over k = 16: one warp-wide tensor-core instruction.
 
-    Inputs are rounded f16, products and sums are f32 (the .f32 accumulator form).
+    Inputs are rounded f16 or bf16 (the instruction's operand suffix), products
+    and sums are f32 (the .f32 accumulator form).
     """
-    if tuple(s.shape) != (16, 8, 16) or s.ab_dtype != "f16" or s.c_dtype != "f32" or s.b_row_major:
+    if (tuple(s.shape) != (16, 8, 16) or s.ab_dtype not in ("f16", "bf16") or s.c_dtype != "f32"
+            or s.b_row_major):
         raise NotImplementedError(f"mma.sync {s.shape} {s.ab_dtype}->{s.c_dtype}")
     c, a, b = frag(ctx, s.c_frag), frag(ctx, s.a_frag), frag(ctx, s.b_frag)
     group = lambda regs: "{" + ", ".join(regs) + "}"
-    ctx.em.emit(f"mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 \t"
+    ctx.em.emit(f"mma.sync.aligned.m16n8k16.row.col.f32.{s.ab_dtype}.{s.ab_dtype}.f32 \t"
                 f"{group(c)}, {group(a)}, {group(b)}, {group(c)}", f"{s.c_frag} += {s.a_frag} @ {s.b_frag}")
 
 
@@ -175,7 +183,7 @@ def _ldmatrix(ctx: Context, s, buf, ldm: int) -> None:
     - B stored N-major (b_trans), plain x2: rows L%8, k block (L/8)%2.
     - pair: one x4 fills two B fragments (columns n and n+8) at once.
     """
-    if get(buf.dtype).mem != "f16":
+    if get(buf.dtype).mem not in ("f16", "bf16"):   # ldmatrix moves 16-bit elements as they are
         raise NotImplementedError(f"ldmatrix from a {buf.dtype} slab")
     lane = _lane_parts(ctx)[0]
     lo16, hi = _bitop(ctx, "and.b32", lane, 15), _bitop(ctx, "shr.u32", lane, 4)
@@ -250,7 +258,9 @@ def _gmem_fragment(ctx: Context, s, buf, ldm: int) -> None:
 
     memo = {}
     dt = get(buf.dtype)
-    regs = frag(ctx, s.frag)
+    regs, want = frag(ctx, s.frag), ctx.frags[s.frag.partition("[")[0]].dtype
+    if dt.mem not in (want, "f32") and (want, dt.mem) != ("f16", "f64"):   # the cvts PTX has
+        raise NotImplementedError(f"{want} fragment from a {buf.dtype} buffer")
     for reg, pair in zip(regs, halves):
         packed = []
         for (row, row_c), (col, col_c), k in pair:
@@ -261,16 +271,16 @@ def _gmem_fragment(ctx: Context, s, buf, ldm: int) -> None:
             addr, off = memo[key]
             off += (row_c * ldm + col_c) * dt.size
             raw = em.reg(dt.mem)
-            ld = f"ld.global.{'b16' if dt.mem == 'f16' else dt.mem} \t{raw}, {operand(addr, off)}"
+            ld = f"ld.global.{'b16' if bits(dt.mem) == 16 else dt.mem} \t{raw}, {operand(addr, off)}"
             if k_left is None:
                 em.emit(ld)
             else:   # in range when 2t + k < k_left
                 p = X.binary(ctx, "<", X.binary(ctx, "+", t2, X.imm(k)), k_left)  # t2 is a register
                 em.emit(f"mov.b{bits(dt.mem)} \t{raw}, 0", "k past the bound reads 0")
                 em.emit(f"@{p.text} {ld}")
-            if dt.mem != "f16":
-                h = em.reg("f16")
-                em.emit(f"cvt.rn.f16.{dt.mem} \t{h}, {raw}")
+            if dt.mem != want:   # to the fragment's type, nearest-even like torch's .to()
+                h = em.reg(want)
+                em.emit(f"cvt.rn.{want}.{dt.mem} \t{h}, {raw}")
                 raw = h
             packed.append(raw)
         em.emit(f"mov.b32 \t{reg}, {{{packed[0]}, {packed[1]}}}")
@@ -452,15 +462,15 @@ def lower_fragment_row_reduce(ctx: Context, s) -> None:
 
 @handles("FragmentRepack")
 def lower_fragment_repack(ctx: Context, s) -> None:
-    """Two adjacent C fragments (f32, 16x8 each) -> one A fragment (f16, 16x16), in registers.
+    """Two adjacent C fragments (f32, 16x8 each) -> one A fragment (f16/bf16, 16x16), in registers.
 
     The C layout of columns 0..7 and 8..15 matches A's layout of k 0..7 and
     8..15 lane for lane, so each A register is just two C elements rounded to
-    f16 and packed (cvt.rn.f16x2 puts its first source in the high half).
+    f16 (or bf16) and packed (cvt.rn.f16x2 puts its first source in the high half).
     """
-    if s.fragment_layout != "m16n8k16" or s.ab_dtype != "f16" or len(s.srcs) != 2:
+    if s.fragment_layout != "m16n8k16" or s.ab_dtype not in ("f16", "bf16") or len(s.srcs) != 2:
         raise NotImplementedError(f"FragmentRepack {s.fragment_layout} {s.ab_dtype}")
     a = frag(ctx, s.frag)
     c0, c1 = (frag(ctx, f) for f in s.srcs)
     for dst, (hi, lo) in zip(a, ((c0[1], c0[0]), (c0[3], c0[2]), (c1[1], c1[0]), (c1[3], c1[2]))):
-        ctx.em.emit(f"cvt.rn.f16x2.f32 \t{dst}, {hi}, {lo}")
+        ctx.em.emit(f"cvt.rn.{s.ab_dtype}x2.f32 \t{dst}, {hi}, {lo}")

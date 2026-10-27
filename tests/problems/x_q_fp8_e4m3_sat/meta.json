@@ -1,0 +1,64 @@
+{
+ "id": "x_q_fp8_e4m3_sat",
+ "code": "(torch.randn(4096) * 300.0).to(torch.float8_e4m3fn).float()",
+ "rtol": 0,
+ "atol": 0,
+ "graph_inputs": [
+  "x"
+ ],
+ "graph_outputs": [
+  "to_1"
+ ],
+ "kernels": [
+  {
+   "node": "to_1",
+   "entry": "k_to_1_pointwise",
+   "arg_order": [
+    "mul_c1",
+    "x",
+    "to_1"
+   ],
+   "grid": [
+    4,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      300.0
+     ]
+    },
+    {
+     "name": "x",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "seed": 0
+    },
+    {
+     "name": "to_1",
+     "dtype": "f32",
+     "shape": [
+      4096
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

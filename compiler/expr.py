@@ -42,8 +42,8 @@ def imm(value, kind: str | None = None) -> Value:
 
 
 def const(value, dt: DType) -> Value:
-    """A constant of IR dtype `dt`: an f16 constant is rounded to half precision."""
-    return imm(cast_const(value, dt.kind, dt.rounds), dt.kind)
+    """A constant of IR dtype `dt`: an f16/bf16/fp8 constant is rounded to that format."""
+    return imm(cast_const(value, dt.kind, dt.mem if dt.rounds else None), dt.kind)
 
 
 def _fold(op: str, a, b):

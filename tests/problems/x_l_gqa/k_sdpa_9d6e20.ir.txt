@@ -1,0 +1,43 @@
+    Tile[a0, a1_b, a6_b, a1_u, a6_u] (N=8192)
+        in0 = load scaled_dot_product_attention_scale[0]
+        for a2 in 0..64
+            for a3 in 0..32
+                in2__ar0 = load x0[0, a0, (((a1_b * 16) + (a1_u * 1)) + 0), a3]
+                in1__ar0 = load x1[0, (a0 / 4), a2, a3]
+                f32 v0__ar0 = multiply(in1__ar0, in2__ar0)
+                f32 acc0__ar0 <- add(acc0__ar0, v0__ar0)
+            f32 v1__c0_0 = multiply(acc0__ar0, in0)
+            f32 one__c0_0 = 1.0
+            f32 v1__gn__c0_0 = maximum(acc1__c0_0, v1__c0_0)
+            f32 v1__dg__c0_0 = subtract(acc1__c0_0, v1__gn__c0_0)
+            f32 v1__alpha__c0_0 = exp(v1__dg__c0_0)
+            f32 v1__dg_o__c0_0 = subtract(v1__c0_0, v1__gn__c0_0)
+            f32 v1__beta__c0_0 = exp(v1__dg_o__c0_0)
+            f32 v1__acc3_sa__c0_0 = multiply(acc3__c0_0, v1__alpha__c0_0)
+            f32 v1__acc3_sb__c0_0 = multiply(one__c0_0, v1__beta__c0_0)
+            f32 acc3__c0_0 <- add(v1__acc3_sa__c0_0, v1__acc3_sb__c0_0)
+            f32 v1__acc5__sum_sa__c0_0 = multiply(acc5__sum__c0_0, v1__alpha__c0_0)
+            in7__bc0, in7__bc1 = load x2[0, (a0 / 4), a2, (((a6_b * 32) + (a6_u * 2)) + 0)]
+            f32 v1__acc5__sum_sb__c0_0 = multiply(in7__bc0, v1__beta__c0_0)
+            f32 acc5__sum__c0_0 <- add(v1__acc5__sum_sa__c0_0, v1__acc5__sum_sb__c0_0)
+            f32 acc1__c0_0 <- maximum(acc1__c0_0, v1__c0_0)
+            f32 v1__c0_1 = multiply(acc0__ar0, in0)
+            f32 one__c0_1 = 1.0
+            f32 v1__gn__c0_1 = maximum(acc1__c0_1, v1__c0_1)
+            f32 v1__dg__c0_1 = subtract(acc1__c0_1, v1__gn__c0_1)
+            f32 v1__alpha__c0_1 = exp(v1__dg__c0_1)
+            f32 v1__dg_o__c0_1 = subtract(v1__c0_1, v1__gn__c0_1)
+            f32 v1__beta__c0_1 = exp(v1__dg_o__c0_1)
+            f32 v1__acc3_sa__c0_1 = multiply(acc3__c0_1, v1__alpha__c0_1)
+            f32 v1__acc3_sb__c0_1 = multiply(one__c0_1, v1__beta__c0_1)
+            f32 acc3__c0_1 <- add(v1__acc3_sa__c0_1, v1__acc3_sb__c0_1)
+            f32 v1__acc5__sum_sa__c0_1 = multiply(acc5__sum__c0_1, v1__alpha__c0_1)
+            f32 v1__acc5__sum_sb__c0_1 = multiply(in7__bc1, v1__beta__c0_1)
+            f32 acc5__sum__c0_1 <- add(v1__acc5__sum_sa__c0_1, v1__acc5__sum_sb__c0_1)
+            f32 acc1__c0_1 <- maximum(acc1__c0_1, v1__c0_1)
+        f32 v6__c0_0 = reciprocal(acc3__c0_0)
+        f32 acc5__c0_0 = multiply(acc5__sum__c0_0, v6__c0_0)
+        scaled_dot_product_attention[0, a0, (((a1_b * 16) + (a1_u * 1)) + 0), (((a6_b * 32) + (a6_u * 2)) + 0)] = acc5__c0_0
+        f32 v6__c0_1 = reciprocal(acc3__c0_1)
+        f32 acc5__c0_1 = multiply(acc5__sum__c0_1, v6__c0_1)
+        scaled_dot_product_attention[0, a0, (((a1_b * 16) + (a1_u * 1)) + 0), (((a6_b * 32) + (a6_u * 2)) + 1)] = acc5__c0_1

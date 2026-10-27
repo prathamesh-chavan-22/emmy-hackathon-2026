@@ -1,0 +1,6 @@
+    Tile[a0] (N=256)
+        for a1 in 0..64
+            in0 = load mul[a1, (a0 // 16), (a0 % 16)]
+            f32 acc0 <- add(acc0, in0)
+            f32 acc0__obs = copy(acc0)
+            cumsum[a1, (a0 // 16), (a0 % 16)] = acc0__obs

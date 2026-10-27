@@ -1,0 +1,159 @@
+{
+ "id": "x_l_ssm_decay",
+ "code": "(lambda a, x: torch.exp(torch.cumsum(a, -1)) * x)(-torch.randn(16, 256).abs() * 0.1, torch.randn(16, 256))",
+ "rtol": 0.0001,
+ "atol": 0.0001,
+ "graph_inputs": [
+  "x0",
+  "x1"
+ ],
+ "graph_outputs": [
+  "mul_1"
+ ],
+ "kernels": [
+  {
+   "node": "mul",
+   "entry": "k_mul_pointwise",
+   "arg_order": [
+    "mul_c1",
+    "x0",
+    "mul"
+   ],
+   "grid": [
+    4,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.1
+     ]
+    },
+    {
+     "name": "x0",
+     "dtype": "f32",
+     "shape": [
+      16,
+      256
+     ],
+     "seed": 0
+    },
+    {
+     "name": "mul",
+     "dtype": "f32",
+     "shape": [
+      16,
+      256
+     ],
+     "output": true
+    }
+   ],
+   "final": false
+  },
+  {
+   "node": "cumsum",
+   "entry": "k_cumsum_reduce",
+   "arg_order": [
+    "mul",
+    "cumsum"
+   ],
+   "grid": [
+    1,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul",
+     "dtype": "f32",
+     "shape": [
+      16,
+      256
+     ],
+     "intermediate": true
+    },
+    {
+     "name": "cumsum",
+     "dtype": "f32",
+     "shape": [
+      16,
+      256
+     ],
+     "output": true
+    }
+   ],
+   "final": false
+  },
+  {
+   "node": "mul_1",
+   "entry": "k_mul_1_pointwise",
+   "arg_order": [
+    "cumsum",
+    "x1",
+    "mul_1"
+   ],
+   "grid": [
+    4,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "cumsum",
+     "dtype": "f32",
+     "shape": [
+      16,
+      256
+     ],
+     "intermediate": true
+    },
+    {
+     "name": "x1",
+     "dtype": "f32",
+     "shape": [
+      16,
+      256
+     ],
+     "seed": 1
+    },
+    {
+     "name": "mul_1",
+     "dtype": "f32",
+     "shape": [
+      16,
+      256
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}

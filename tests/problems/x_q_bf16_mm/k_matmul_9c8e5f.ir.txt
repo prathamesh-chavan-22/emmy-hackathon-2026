@@ -1,0 +1,51 @@
+    Tile[a0_b, a1_b, a0_u, a1_u, _lane] (N=256)
+        RegFragment a:bf16 _a0[4] (16x8x16)
+        RegFragment a:bf16 _a1[4] (16x8x16)
+        RegFragment a:bf16 _a2[4] (16x8x16)
+        RegFragment a:bf16 _a3[4] (16x8x16)
+        RegFragment b:bf16 _b0[2] (16x8x16)
+        RegFragment c:f32 _c0_0[4] (16x8x16)
+        RegFragment c:f32 _c1_0[4] (16x8x16)
+        RegFragment c:f32 _c2_0[4] (16x8x16)
+        RegFragment c:f32 _c3_0[4] (16x8x16)
+        Smem __nv_bfloat16 _a_smem[64, 16] align=256
+        Smem __nv_bfloat16 _b_smem[16, 8] align=16
+        for _ks in 0..64:16
+            for _fa in ((((a0_u * 1) + a1_u) * 32) + _lane)..128:32
+                in0__c0, in0__c1, in0__c2, in0__c3, in0__c4, in0__c5, in0__c6, in0__c7 = load x0[((a0_b * 64) + ((_fa * 8) / 16)), (_ks + ((_fa * 8) % 16))]
+                bf16 v0__c0 = copy(in0__c0)
+                bf16 v0__c1 = copy(in0__c1)
+                bf16 v0__c2 = copy(in0__c2)
+                bf16 v0__c3 = copy(in0__c3)
+                bf16 v0__c4 = copy(in0__c4)
+                bf16 v0__c5 = copy(in0__c5)
+                bf16 v0__c6 = copy(in0__c6)
+                bf16 v0__c7 = copy(in0__c7)
+                _a_smem[((_fa * 8) / 16), ((_fa * 8) % 16)] swz=B32 = (v0__c0, v0__c1, v0__c2, v0__c3, v0__c4, v0__c5, v0__c6, v0__c7)
+            for _fb in ((((a0_u * 1) + a1_u) * 32) + _lane)..16:32
+                in1__c0, in1__c1, in1__c2, in1__c3, in1__c4, in1__c5, in1__c6, in1__c7 = load x1[(_ks + ((_fb * 8) / 8)), ((a1_b * 8) + ((_fb * 8) % 8))]
+                bf16 v1__c0 = copy(in1__c0)
+                bf16 v1__c1 = copy(in1__c1)
+                bf16 v1__c2 = copy(in1__c2)
+                bf16 v1__c3 = copy(in1__c3)
+                bf16 v1__c4 = copy(in1__c4)
+                bf16 v1__c5 = copy(in1__c5)
+                bf16 v1__c6 = copy(in1__c6)
+                bf16 v1__c7 = copy(in1__c7)
+                _b_smem[((_fb * 8) / 8), ((_fb * 8) % 8)] = (v1__c0, v1__c1, v1__c2, v1__c3, v1__c4, v1__c5, v1__c6, v1__c7)
+            Sync
+            for _ki in 0..16:16
+                LdmatrixLoad _a0 <- _a_smem[((a0_u * 64) + 0), _ki] (x4, ldm=16)
+                LdmatrixLoad _a1 <- _a_smem[((a0_u * 64) + 16), _ki] (x4, ldm=16)
+                LdmatrixLoad _a2 <- _a_smem[((a0_u * 64) + 32), _ki] (x4, ldm=16)
+                LdmatrixLoad _a3 <- _a_smem[((a0_u * 64) + 48), _ki] (x4, ldm=16)
+                LdmatrixLoad _b0 <- _b_smem[_ki, ((a1_u * 8) + 0)] (x2.trans, ldm=8)
+                MmaSyncPtx _c0_0 += _a0 @ _b0 (m16n8k16 bf16)
+                MmaSyncPtx _c1_0 += _a1 @ _b0 (m16n8k16 bf16)
+                MmaSyncPtx _c2_0 += _a2 @ _b0 (m16n8k16 bf16)
+                MmaSyncPtx _c3_0 += _a3 @ _b0 (m16n8k16 bf16)
+            Sync
+        RegStore to_2[(((a0_b * 64) + (a0_u * 64)) + 0), (((a1_b * 8) + (a1_u * 8)) + 0)] <- _c0_0 epilogue[copy](no loads) (ldm=auto)
+        RegStore to_2[(((a0_b * 64) + (a0_u * 64)) + 16), (((a1_b * 8) + (a1_u * 8)) + 0)] <- _c1_0 epilogue[copy](no loads) (ldm=auto)
+        RegStore to_2[(((a0_b * 64) + (a0_u * 64)) + 32), (((a1_b * 8) + (a1_u * 8)) + 0)] <- _c2_0 epilogue[copy](no loads) (ldm=auto)
+        RegStore to_2[(((a0_b * 64) + (a0_u * 64)) + 48), (((a1_b * 8) + (a1_u * 8)) + 0)] <- _c3_0 epilogue[copy](no loads) (ldm=auto)

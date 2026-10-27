@@ -1,0 +1,106 @@
+{
+  "inputs": [
+    "cumsum",
+    "cumsum_1",
+    "x1"
+  ],
+  "outputs": [
+    "matmul"
+  ],
+  "nodes": {
+    "tril_zero": {
+      "op": "ConstantOp",
+      "op_fields": {
+        "name": "tril_zero",
+        "value": 0.0,
+        "context_value": null,
+        "load_ops": [],
+        "source_path": null,
+        "source_parts": [],
+        "source_shape": null,
+        "source_dtype": null,
+        "source_graph": null
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "tril_zero",
+          "shape": [
+            1
+          ],
+          "dtype": "f32"
+        }
+      ]
+    },
+    "cumsum": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "cumsum",
+          "shape": [
+            128
+          ],
+          "dtype": "f32"
+        }
+      ]
+    },
+    "cumsum_1": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "cumsum_1",
+          "shape": [
+            128
+          ],
+          "dtype": "f32"
+        }
+      ]
+    },
+    "x1": {
+      "op": "InputOp",
+      "op_fields": {},
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "x1",
+          "shape": [
+            128,
+            16
+          ],
+          "dtype": "f32"
+        }
+      ]
+    },
+    "matmul": {
+      "op": "KernelOp",
+      "op_fields": {
+        "body": [
+          "Tile(axes=(Axis(name='a0_b', extent=Dim(32), window=Window(parent=Axis(name='a0', extent=Dim(128), window=None), base=None, bound=None, partition=False)), Axis(name='a1_b', extent=Dim(4), window=Window(parent=Axis(name='a1', extent=Dim(16), window=None), base=None, bound=None, partition=False)), Axis(name='a0_u', extent=Dim(1), window=None), Axis(name='a1_u', extent=Dim(1), window=None)), body=(Load(names=('in1__ar0',), input='cumsum', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int')),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Load(names=('in0__ar0',), input='tril_zero', index=(Literal(value=0, dtype='int'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Load(names=('in1__ar1',), input='cumsum', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=1, dtype='int')),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Load(names=('in0__ar1',), input='tril_zero', index=(Literal(value=0, dtype='int'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Load(names=('in1__ar2',), input='cumsum', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=2, dtype='int')),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Load(names=('in0__ar2',), input='tril_zero', index=(Literal(value=0, dtype='int'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Load(names=('in1__ar3',), input='cumsum', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=3, dtype='int')),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Load(names=('in0__ar3',), input='tril_zero', index=(Literal(value=0, dtype='int'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Loop(axis=Axis(name='a2', extent=Dim(128), window=None), body=(Load(names=('in3__ar0',), input='cumsum_1', index=(Var(name='a2'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v0__ar0', op=ElementwiseImpl('subtract'), args=('in1__ar0', 'in3__ar0'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v1__ar0', op=ElementwiseImpl('exp'), args=('v0__ar0',), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Select(name='v2__ar0', branches=(SelectBranch(value='v1__ar0', select=BinaryExpr(op='<=', left=Var(name='a2'), right=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int')))), SelectBranch(value='in0__ar0', select=Literal(value=True, dtype='bool')))), Load(names=('in3__ar1',), input='cumsum_1', index=(Var(name='a2'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v0__ar1', op=ElementwiseImpl('subtract'), args=('in1__ar1', 'in3__ar1'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v1__ar1', op=ElementwiseImpl('exp'), args=('v0__ar1',), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Select(name='v2__ar1', branches=(SelectBranch(value='v1__ar1', select=BinaryExpr(op='<=', left=Var(name='a2'), right=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=1, dtype='int')))), SelectBranch(value='in0__ar1', select=Literal(value=True, dtype='bool')))), Load(names=('in3__ar2',), input='cumsum_1', index=(Var(name='a2'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v0__ar2', op=ElementwiseImpl('subtract'), args=('in1__ar2', 'in3__ar2'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v1__ar2', op=ElementwiseImpl('exp'), args=('v0__ar2',), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Select(name='v2__ar2', branches=(SelectBranch(value='v1__ar2', select=BinaryExpr(op='<=', left=Var(name='a2'), right=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=2, dtype='int')))), SelectBranch(value='in0__ar2', select=Literal(value=True, dtype='bool')))), Load(names=('in3__ar3',), input='cumsum_1', index=(Var(name='a2'),), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v0__ar3', op=ElementwiseImpl('subtract'), args=('in1__ar3', 'in3__ar3'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v1__ar3', op=ElementwiseImpl('exp'), args=('v0__ar3',), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Select(name='v2__ar3', branches=(SelectBranch(value='v1__ar3', select=BinaryExpr(op='<=', left=Var(name='a2'), right=BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=3, dtype='int')))), SelectBranch(value='in0__ar3', select=Literal(value=True, dtype='bool')))), Load(names=('in2__bc0', 'in2__bc1', 'in2__bc2', 'in2__bc3'), input='x1', index=(Var(name='a2'), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int'))), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Assign(name='v3__c0_0', op=ElementwiseImpl('multiply'), args=('in2__bc0', 'v2__ar0'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c0_0', value='v3__c0_0', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c0_1', op=ElementwiseImpl('multiply'), args=('in2__bc1', 'v2__ar0'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c0_1', value='v3__c0_1', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c0_2', op=ElementwiseImpl('multiply'), args=('in2__bc2', 'v2__ar0'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c0_2', value='v3__c0_2', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c0_3', op=ElementwiseImpl('multiply'), args=('in2__bc3', 'v2__ar0'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c0_3', value='v3__c0_3', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c1_0', op=ElementwiseImpl('multiply'), args=('in2__bc0', 'v2__ar1'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c1_0', value='v3__c1_0', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c1_1', op=ElementwiseImpl('multiply'), args=('in2__bc1', 'v2__ar1'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c1_1', value='v3__c1_1', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c1_2', op=ElementwiseImpl('multiply'), args=('in2__bc2', 'v2__ar1'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c1_2', value='v3__c1_2', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c1_3', op=ElementwiseImpl('multiply'), args=('in2__bc3', 'v2__ar1'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c1_3', value='v3__c1_3', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c2_0', op=ElementwiseImpl('multiply'), args=('in2__bc0', 'v2__ar2'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c2_0', value='v3__c2_0', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c2_1', op=ElementwiseImpl('multiply'), args=('in2__bc1', 'v2__ar2'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c2_1', value='v3__c2_1', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c2_2', op=ElementwiseImpl('multiply'), args=('in2__bc2', 'v2__ar2'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c2_2', value='v3__c2_2', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c2_3', op=ElementwiseImpl('multiply'), args=('in2__bc3', 'v2__ar2'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c2_3', value='v3__c2_3', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c3_0', op=ElementwiseImpl('multiply'), args=('in2__bc0', 'v2__ar3'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c3_0', value='v3__c3_0', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c3_1', op=ElementwiseImpl('multiply'), args=('in2__bc1', 'v2__ar3'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c3_1', value='v3__c3_1', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c3_2', op=ElementwiseImpl('multiply'), args=('in2__bc2', 'v2__ar3'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c3_2', value='v3__c3_2', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None), Assign(name='v3__c3_3', op=ElementwiseImpl('multiply'), args=('in2__bc3', 'v2__ar3'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4)), Accum(name='acc0__c3_3', value='v3__c3_3', op=ElementwiseImpl('add'), dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), axes=('a2',), base=None)), unroll=False, seed=True), Write(output='matmul', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int'))), values=('acc0__c0_0', 'acc0__c0_1', 'acc0__c0_2', 'acc0__c0_3'), value_dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), atomic=False, swizzle='NONE'), Write(output='matmul', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=1, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int'))), values=('acc0__c1_0', 'acc0__c1_1', 'acc0__c1_2', 'acc0__c1_3'), value_dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), atomic=False, swizzle='NONE'), Write(output='matmul', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=2, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int'))), values=('acc0__c2_0', 'acc0__c2_1', 'acc0__c2_2', 'acc0__c2_3'), value_dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), atomic=False, swizzle='NONE'), Write(output='matmul', index=(BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a0_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a0_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=3, dtype='int')), BinaryExpr(op='+', left=BinaryExpr(op='+', left=BinaryExpr(op='*', left=Var(name='a1_b'), right=Literal(value=4, dtype='int')), right=BinaryExpr(op='*', left=Var(name='a1_u'), right=Literal(value=4, dtype='int'))), right=Literal(value=0, dtype='int'))), values=('acc0__c3_0', 'acc0__c3_1', 'acc0__c3_2', 'acc0__c3_3'), value_dtype=DataType(name='f32', np=dtype('float32'), nbytes=4), atomic=False, swizzle='NONE')), block_threads=None, aux_threads=0, raster_axes=('a0_b', 'a1_b'), raster_group=None, raster_orient='m')"
+        ],
+        "name": "k_matmul_415df3",
+        "zero_delegated": [],
+        "serial": []
+      },
+      "inputs": [
+        "tril_zero",
+        "cumsum",
+        "cumsum_1",
+        "x1"
+      ],
+      "outputs": [
+        {
+          "name": "matmul",
+          "shape": [
+            128,
+            16
+          ],
+          "dtype": "f32"
+        }
+      ]
+    }
+  }
+}

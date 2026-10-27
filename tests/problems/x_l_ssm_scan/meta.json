@@ -1,0 +1,213 @@
+{
+ "id": "x_l_ssm_scan",
+ "code": "(lambda a, u: torch.tril(torch.exp(torch.cumsum(a, 0)[:, None] - torch.cumsum(a, 0)[None, :])) @ u)(-torch.randn(128).abs() * 0.1, torch.randn(128, 16))",
+ "rtol": 0.001,
+ "atol": 0.001,
+ "graph_inputs": [
+  "x0",
+  "x1"
+ ],
+ "graph_outputs": [
+  "matmul"
+ ],
+ "kernels": [
+  {
+   "node": "mul",
+   "entry": "k_mul_pointwise",
+   "arg_order": [
+    "mul_c1",
+    "x0",
+    "mul"
+   ],
+   "grid": [
+    1,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul_c1",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.1
+     ]
+    },
+    {
+     "name": "x0",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "seed": 0
+    },
+    {
+     "name": "mul",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "output": true
+    }
+   ],
+   "final": false
+  },
+  {
+   "node": "cumsum",
+   "entry": "k_cumsum_reduce",
+   "arg_order": [
+    "mul",
+    "cumsum"
+   ],
+   "grid": [
+    1,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "intermediate": true
+    },
+    {
+     "name": "cumsum",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "output": true
+    }
+   ],
+   "final": false
+  },
+  {
+   "node": "cumsum_1",
+   "entry": "k_cumsum_1_reduce",
+   "arg_order": [
+    "mul",
+    "cumsum_1"
+   ],
+   "grid": [
+    1,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "mul",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "intermediate": true
+    },
+    {
+     "name": "cumsum_1",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "output": true
+    }
+   ],
+   "final": false
+  },
+  {
+   "node": "matmul",
+   "entry": "k_matmul_415df3",
+   "arg_order": [
+    "tril_zero",
+    "cumsum",
+    "cumsum_1",
+    "x1",
+    "matmul"
+   ],
+   "grid": [
+    1,
+    1,
+    1
+   ],
+   "block": [
+    256,
+    1,
+    1
+   ],
+   "smem_bytes": 0,
+   "zero_outputs": [],
+   "args": [
+    {
+     "name": "tril_zero",
+     "dtype": "f32",
+     "shape": [
+      1
+     ],
+     "data": [
+      0.0
+     ]
+    },
+    {
+     "name": "cumsum",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "intermediate": true
+    },
+    {
+     "name": "cumsum_1",
+     "dtype": "f32",
+     "shape": [
+      128
+     ],
+     "intermediate": true
+    },
+    {
+     "name": "x1",
+     "dtype": "f32",
+     "shape": [
+      128,
+      16
+     ],
+     "seed": 1
+    },
+    {
+     "name": "matmul",
+     "dtype": "f32",
+     "shape": [
+      128,
+      16
+     ],
+     "output": true
+    }
+   ],
+   "final": true
+  }
+ ]
+}
