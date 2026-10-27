@@ -287,3 +287,23 @@ Same schedules emmy chose; better instructions inside them. Measured on the runn
   SSM decay and scan (matrix form), causal linear attention, SwiGLU (f32 and f16 tensor cores),
   RoPE, weighted RMSNorm, logit softcapping, grouped-query attention.
 - PTX of all 180 earlier tests is byte-identical to the previous commit.
+
+## 2026-10-27 - review round 6: strict review of the low-precision commit
+
+- **Bug found by merging two paths**: f16 constants used numpy, bf16/fp8 our own `round_const`.
+  Routing f16 through `round_const` too (one rule, one table) showed it lost the sign of a tiny
+  negative constant that rounds to zero (-1e-9 -> +0, torch says -0). Fixed; constants now match
+  numpy/torch bit for bit for f16, bf16, e4m3, e5m2 on 500k values, signed zeros and +-inf included.
+- **e4m3 infinity constant**: was kept as inf; torch saturates it to 448 like any overflow.
+- **Silent garbage closed off**: tensor-core registers are raw 16-bit pairs, so an f16 fragment read
+  as bf16 would compute nonsense without an error. Fragments carry their type, and mma, ldmatrix and
+  repack now check it against the slab / instruction.
+- **Regression fixed**: an f16 fragment straight from an int buffer (`cvt.rn.f16.s32`) had become
+  an error; the conversion table now lists exactly the cvts sm_89 has.
+- **Clear errors instead of ptxas failures**: `red.add.bf16` needs sm_90 and fp8 has no `red`, so
+  an atomic store of those types is a NotImplementedError; an fp8 buffer raised a KeyError before
+  reaching its own clear error.
+- **Documented, not fixable**: a bf16 matmul's IR stores the f32 accumulator - torch's final bf16
+  rounding of the product disappears in emmy's tracing, so that test matches to half a bf16 ulp.
+- Rejected: reusing the rounded bf16 register for the slab store (about 3 instructions per staged
+  element in one test kernel; not worth a special path).

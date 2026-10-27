@@ -37,7 +37,7 @@ disagree (integer division, f16 rounding of intermediates, bool <-> float masks)
 - fp8 e4m3 and e5m2, bit-exact with torch's rounding, subnormals and overflow rules (e4m3fn
   saturates, e5m2 goes to inf). The hardware cvt needs PTX 8.1, so we round in plain f32 with a
   magic-constant add that makes `add.rn` round at the fp8 step.
-- int4 dequantization from packed i32 words.
+- int4 dequantization (a nibble of a packed i32 word).
 - int8 and fp4 are not reachable: emmy 0.3.11 has no int8 dtype, and its fp4 has no torch cast.
 
 **Tensor cores (f16 and bf16):**
@@ -102,6 +102,8 @@ Every lowering function has a docstring explaining *why* it lowers the way it do
   Its own reference kernel has the same error.
 - Many torch ops (ceil, sign, leaky_relu, log_softmax, ...) do not trace through emmy 0.3.11, so the
   hidden set cannot contain them.
+- A bf16 matmul's IR stores the f32 accumulator: torch's final bf16 rounding of the product is
+  lost in tracing, so the result is half a bf16 ulp from torch (the operands are exact).
 - torch 2.14 saturates e4m3fn overflow to +-448 (even inf); the runner returns inf as JSON null,
   so a kernel producing inf cannot pass there.
 - An f16 `(a*b).sum()` and an f16 vector matmul produce identical IR but differ in torch's

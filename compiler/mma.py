@@ -42,6 +42,8 @@ ELEM_ROW, ELEM_COL = "__M__", "__N__"
 
 ELEM_ROWS = (0, 0, 1, 1)       # C element -> which of the lane's two rows (g, g+8)
 
+AB_TYPES = ("f16", "bf16")     # operand types of mma.sync m16n8k16 on sm_89 (16-bit, two per .b32)
+
 
 @dataclass
 class Fragment:
@@ -69,6 +71,19 @@ def frag(ctx: Context, ref: str) -> list[str]:
             raise NotImplementedError(f"fragment member {ref!r} picked by a runtime value")
         i = i.const
     return family.members[i]
+
+
+def _frag_dtype(ctx: Context, ref: str) -> str:
+    frag(ctx, ref)   # the clear error for an undeclared fragment
+    return ctx.frags[ref.partition("[")[0]].dtype
+
+
+def _check_dtype(ctx: Context, dtype: str, *refs: str) -> None:
+    """Operand registers are raw 16-bit pairs: reading f16 bits as bf16 (or back) would be
+    silent garbage, so every fragment an op touches must hold the op's element type."""
+    for ref in refs:
+        if (have := _frag_dtype(ctx, ref)) != dtype:
+            raise NotImplementedError(f"{ref} holds {have}, used as {dtype}")
 
 
 def _new_frag(ctx: Context, name: str, kind: str, n: int, count: int = 1, dtype: str = "f32") -> Fragment:
@@ -129,7 +144,7 @@ def lower_reg_fragment(ctx: Context, s) -> None:
         raise NotImplementedError(f"mma fragment shape {s.shape}")
     dtype = getattr(s.dtype, "name", str(s.dtype))
     count = int(s.count)
-    if s.role in ("a", "b") and dtype in ("f16", "bf16"):
+    if s.role in ("a", "b") and dtype in AB_TYPES:
         _new_frag(ctx, s.name, "b32", 4 if s.role == "a" else 2, count, dtype)
     elif s.role == "c" and dtype == "f32":
         f = _new_frag(ctx, s.name, "f32", 4, count)
@@ -147,9 +162,10 @@ def lower_mma_sync(ctx: Context, s) -> None:
     Inputs are rounded f16 or bf16 (the instruction's operand suffix), products
     and sums are f32 (the .f32 accumulator form).
     """
-    if (tuple(s.shape) != (16, 8, 16) or s.ab_dtype not in ("f16", "bf16") or s.c_dtype != "f32"
+    if (tuple(s.shape) != (16, 8, 16) or s.ab_dtype not in AB_TYPES or s.c_dtype != "f32"
             or s.b_row_major):
         raise NotImplementedError(f"mma.sync {s.shape} {s.ab_dtype}->{s.c_dtype}")
+    _check_dtype(ctx, s.ab_dtype, s.a_frag, s.b_frag)
     c, a, b = frag(ctx, s.c_frag), frag(ctx, s.a_frag), frag(ctx, s.b_frag)
     group = lambda regs: "{" + ", ".join(regs) + "}"
     ctx.em.emit(f"mma.sync.aligned.m16n8k16.row.col.f32.{s.ab_dtype}.{s.ab_dtype}.f32 \t"
@@ -183,8 +199,8 @@ def _ldmatrix(ctx: Context, s, buf, ldm: int) -> None:
     - B stored N-major (b_trans), plain x2: rows L%8, k block (L/8)%2.
     - pair: one x4 fills two B fragments (columns n and n+8) at once.
     """
-    if get(buf.dtype).mem not in ("f16", "bf16"):   # ldmatrix moves 16-bit elements as they are
-        raise NotImplementedError(f"ldmatrix from a {buf.dtype} slab")
+    # ldmatrix moves the 16-bit patterns as they are: the slab must hold the fragment's type.
+    _check_dtype(ctx, get(buf.dtype).mem, s.frag, *([s.pair_frag] if s.pair_frag is not None else []))
     lane = _lane_parts(ctx)[0]
     lo16, hi = _bitop(ctx, "and.b32", lane, 15), _bitop(ctx, "shr.u32", lane, 4)
     if s.pair_frag is not None:
@@ -258,8 +274,9 @@ def _gmem_fragment(ctx: Context, s, buf, ldm: int) -> None:
 
     memo = {}
     dt = get(buf.dtype)
-    regs, want = frag(ctx, s.frag), ctx.frags[s.frag.partition("[")[0]].dtype
-    if dt.mem not in (want, "f32") and (want, dt.mem) != ("f16", "f64"):   # the cvts PTX has
+    regs, want = frag(ctx, s.frag), _frag_dtype(ctx, s.frag)
+    # The cvts sm_89 has: to f16 from any float or int but bf16, to bf16 from f32 only.
+    if dt.mem != want and (dt.mem == "bf16" or want == "bf16" and dt.mem != "f32"):
         raise NotImplementedError(f"{want} fragment from a {buf.dtype} buffer")
     for reg, pair in zip(regs, halves):
         packed = []
@@ -468,8 +485,9 @@ def lower_fragment_repack(ctx: Context, s) -> None:
     8..15 lane for lane, so each A register is just two C elements rounded to
     f16 (or bf16) and packed (cvt.rn.f16x2 puts its first source in the high half).
     """
-    if s.fragment_layout != "m16n8k16" or s.ab_dtype not in ("f16", "bf16") or len(s.srcs) != 2:
+    if s.fragment_layout != "m16n8k16" or s.ab_dtype not in AB_TYPES or len(s.srcs) != 2:
         raise NotImplementedError(f"FragmentRepack {s.fragment_layout} {s.ab_dtype}")
+    _check_dtype(ctx, s.ab_dtype, s.frag)
     a = frag(ctx, s.frag)
     c0, c1 = (frag(ctx, f) for f in s.srcs)
     for dst, (hi, lo) in zip(a, ((c0[1], c0[0]), (c0[3], c0[2]), (c1[1], c1[0]), (c1[3], c1[2]))):

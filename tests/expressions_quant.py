@@ -6,18 +6,10 @@ fails), and its fp4 (f4e2m1x2) has no torch cast to reach it.
 References use torch itself (this file runs in the generator venv).
 """
 
-import numpy as np
 import torch
 
 t = torch.from_numpy
 I32P = "torch.randint(-2**31, 2**31 - 1, (256, 64), dtype=torch.int32)"
-
-
-def _unpack4(p):
-    """8 signed int4 per i32, low nibble first -> [..., 8 * n] (two's complement)."""
-    p = t(p)
-    q = torch.stack([(p >> (4 * i)) & 15 for i in range(8)], -1)
-    return (q - 16 * (q >= 8)).flatten(-2)
 
 
 OPEN = [
@@ -42,6 +34,8 @@ OPEN += [
          ref=lambda a, b: [(t(a).bfloat16() * t(b).bfloat16() + t(a).bfloat16()).float().numpy()], rtol=0, atol=0),
     dict(id="x_q_fp8_scaled", code="(lambda x: (x * 64.0).to(torch.float8_e4m3fn).float() / 64.0)(torch.randn(64, 256))",
          ref=lambda x: [((t(x) * 64.0).to(torch.float8_e4m3fn).float() / 64.0).numpy()], rtol=0, atol=0),
+    # emmy's IR stores the f32 accumulator; torch rounds the product to bf16 before .float(),
+    # and that step is not in the IR. So this one matches to half a bf16 ulp, not bit for bit.
     dict(id="x_q_bf16_mm", code="(lambda a, b: (a.to(torch.bfloat16) @ b.to(torch.bfloat16)).float())"
                                 "(torch.randn(64, 64), torch.randn(64, 64))",
          ref=lambda a, b: [(t(a).bfloat16() @ t(b).bfloat16()).float().numpy()], rtol=1e-2, atol=1e-2),

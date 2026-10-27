@@ -141,13 +141,14 @@ def load_values(ctx: Context, buf: Buffer, flat: Offset, count: int, names=()) -
     """Load `count` consecutive elements starting at `flat`, vectorized (v4/v2) where possible."""
     em = ctx.em
     dt = get(buf.dtype)
+    ptx = _ptx_type(dt.mem)   # first: it rejects the types we cannot move
     base, off = address(ctx, buf, flat)
     regs = [em.reg(dt.mem) for _ in range(count)]
     for start, w in _vector_groups(count, dt.size):
         dst = regs[start] if w == 1 else "{" + ", ".join(regs[start:start + w]) + "}"
         vec = "" if w == 1 else f".v{w}"
         note = f"{', '.join(names[start:start + w])} = {buf.name}[...]" if names else None
-        em.emit(f"ld.{buf.space}{vec}.{_ptx_type(dt.mem)} \t{dst}, {operand(base, off + start * dt.size)}", note)
+        em.emit(f"ld.{buf.space}{vec}.{ptx} \t{dst}, {operand(base, off + start * dt.size)}", note)
     if dt.mem == dt.kind:
         return [Value(r, dt.kind) for r in regs]
     out = [em.reg(dt.kind) for _ in regs]
@@ -160,6 +161,9 @@ def store_values(ctx: Context, buf: Buffer, flat: Offset, values: list[Value], a
     """Store consecutive elements: vector st, or one red.add per element when atomic."""
     em = ctx.em
     dt = get(buf.dtype)
+    ptx = _ptx_type(dt.mem)
+    if atomic and dt.atomic is None:
+        raise NotImplementedError(f"atomic add to a {buf.dtype} buffer on sm_89")
     base, off = address(ctx, buf, flat)
     # Each value as the buffer's element (a bool stored to a float buffer is
     # 1.0/0.0 and a float stored to an int one truncates, as in emmy's C).
@@ -178,4 +182,4 @@ def store_values(ctx: Context, buf: Buffer, flat: Offset, values: list[Value], a
         src = vals[start] if w == 1 else "{" + ", ".join(vals[start:start + w]) + "}"
         vec = "" if w == 1 else f".v{w}"
         note = f"{buf.name}[...] = {', '.join(names[start:start + w])}" if names else None
-        em.emit(f"st.{buf.space}{vec}.{_ptx_type(dt.mem)} \t{operand(base, off + start * dt.size)}, {src}", note)
+        em.emit(f"st.{buf.space}{vec}.{ptx} \t{operand(base, off + start * dt.size)}, {src}", note)

@@ -43,7 +43,7 @@ class DType:
     size: int        # bytes per element in memory
     mem: str         # PTX type of ld/st/red, and of the register a load lands in
     kind: str        # register kind its values compute in
-    atomic: str      # PTX type of red.add
+    atomic: str | None   # PTX type of red.add (None: no red.add for it on sm_89)
 
     @property
     def rounds(self) -> bool:
@@ -73,9 +73,9 @@ DTYPES = {d.name: d for d in (
     DType("f64", 8, "f64", "f64", "f64"),
     DType("i32", 4, "s32", "s32", "s32"),
     DType("i64", 8, "s64", "s64", "u64"),   # two's complement: unsigned add is the same bits
-    DType("bf16", 2, "bf16", "f32", "noftz.bf16"),
-    DType("f8e4m3", 1, "e4m3", "f32", "e4m3"),
-    DType("f8e5m2", 1, "e5m2", "f32", "e5m2"),
+    DType("bf16", 2, "bf16", "f32", None),       # red.add.noftz.bf16 needs sm_90
+    DType("f8e4m3", 1, "e4m3", "f32", None),
+    DType("f8e5m2", 1, "e5m2", "f32", None),
 )}
 
 # C type names emmy uses for shared-memory arrays.
@@ -110,11 +110,13 @@ def common_kind(kinds) -> str:
 
 def round_const(value: float, fmt: Narrow) -> float:
     """value rounded to nearest-even in a narrow float format, as round_to does on the GPU."""
-    if value == 0 or not math.isfinite(value):
+    if math.isinf(value):   # e4m3fn has no infinity: torch saturates it like any overflow
+        return math.copysign(fmt.overflow, value)
+    if value == 0 or math.isnan(value):
         return value
     exp = max(math.floor(math.log2(abs(value))), fmt.min_exp)
     step = 2.0 ** (exp - fmt.mantissa)
-    r = round(value / step) * step        # Python's round() is half-to-even
+    r = math.copysign(round(value / step) * step, value)   # round() is half-to-even; keeps -0
     return math.copysign(fmt.overflow, value) if abs(r) > fmt.max else r
 
 
@@ -140,9 +142,7 @@ def cast_const(value, kind: str, rounds: str | None = None):
         return float(value)
     with np.errstate(over="ignore"):
         v = float(np.float32(value))
-        if rounds == "f16":
-            return float(np.float16(v))
-        return round_const(v, NARROW[rounds]) if rounds else v
+    return round_const(v, NARROW[rounds]) if rounds else v
 
 
 def cvt(em, dst: str, dst_kind: str, src: str, src_kind: str) -> None:
