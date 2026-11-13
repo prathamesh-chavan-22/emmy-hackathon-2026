@@ -438,6 +438,9 @@ def lower_assign(ctx: Context, s) -> None:
         ctx.index_vars[s.name] = ctx.index_vars[s.args[0]]   # `bf16 v0 = copy(in0)`
 
 
+_ACC_DTYPE = {"f64": "f64", "s32": "i32", "s64": "i64"}   # register kind -> IR dtype
+
+
 @handles("Accum")
 def lower_accum(ctx: Context, s) -> None:
     """`acc <- op(acc, value)` folded into the accumulator's own register.
@@ -455,8 +458,13 @@ def lower_accum(ctx: Context, s) -> None:
     if acc is None:
         raise ValueError(f"Accum {s.name!r} has no seeded accumulator in scope")
     left = s.base or s.name
-    if dtype_name(s.dtype) != "f32":
-        ctx.assign(s.name, compute(ctx, s.op.name, [left, s.value], s.dtype))
+    dtype = dtype_name(s.dtype)
+    if dtype == "f32" and acc.kind != "f32":
+        # emmy labels the fold that merges unrolled partial accumulators f32 whatever
+        # the accumulator holds (an f64 softmax row max): fold in the accumulator's kind.
+        dtype = _ACC_DTYPE[acc.kind]
+    if dtype != "f32":
+        ctx.assign(s.name, compute(ctx, s.op.name, [left, s.value], dtype))
         return
     args, consts = _operands(ctx, [left, s.value], ["f32", "f32"])
     product = ctx.products.get(args[1]) if s.op.name == "add" else None
